@@ -1,0 +1,21 @@
+# Build files
+.gradle
+.kotlin
+build
+
+# IDE files
+*.iml
+.idea/*
+!.idea/icon.png
+/captures
+
+# Configuration files
+local.properties
+
+# macOS specific files
+.DS_Store
+
+# SY ignores
+google-services.json
+/app/src/main/assets/client_secrets.json
+*.apk

@@ -104,6 +104,7 @@ import tachiyomi.presentation.core.components.material.PullRefresh
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.shouldExpandFAB
+import tachiyomi.source.network.config.isPendingChapterUrl
 import tachiyomi.source.local.isLocal
 import java.time.Instant
 import java.time.ZoneId
@@ -153,6 +154,10 @@ fun MangaScreen(
     onOpenPagePreview: (Int) -> Unit,
     onMorePreviewsClicked: () -> Unit,
     previewsRowCount: Int,
+    // SY <--
+
+    // SY -->
+    onSourceSettingsClicked: (() -> Unit)?,
     // SY <--
 
     // For bottom action menu
@@ -214,6 +219,7 @@ fun MangaScreen(
             onMorePreviewsClicked = onMorePreviewsClicked,
             previewsRowCount = previewsRowCount,
             // SY <--
+            onSourceSettingsClicked = onSourceSettingsClicked,
             onMultiBookmarkClicked = onMultiBookmarkClicked,
             onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
             onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
@@ -261,6 +267,7 @@ fun MangaScreen(
             onMorePreviewsClicked = onMorePreviewsClicked,
             previewsRowCount = previewsRowCount,
             // SY <--
+            onSourceSettingsClicked = onSourceSettingsClicked,
             onMultiBookmarkClicked = onMultiBookmarkClicked,
             onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
             onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
@@ -318,6 +325,7 @@ private fun MangaScreenSmallImpl(
     onMorePreviewsClicked: () -> Unit,
     previewsRowCount: Int,
     // SY <--
+    onSourceSettingsClicked: (() -> Unit)?,
 
     // For bottom action menu
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
@@ -388,6 +396,7 @@ private fun MangaScreenSmallImpl(
                 onClickRecommend = onRecommendClicked.takeIf { state.showRecommendationsInOverflow },
                 onClickMergedSettings = onMergedSettingsClicked.takeIf { state.manga.source == MERGED_SOURCE_ID },
                 onClickMerge = onMergeClicked.takeIf { state.showMergeInOverflow },
+                onClickSourceSettings = onSourceSettingsClicked,
                 // SY <--
                 actionModeCounter = selectedChapterCount,
                 onCancelActionMode = { onAllChapterSelected(false) },
@@ -639,6 +648,7 @@ fun MangaScreenLargeImpl(
     onMorePreviewsClicked: () -> Unit,
     previewsRowCount: Int,
     // SY <--
+    onSourceSettingsClicked: (() -> Unit)?,
 
     // For bottom action menu
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
@@ -700,6 +710,7 @@ fun MangaScreenLargeImpl(
                 onClickRecommend = onRecommendClicked.takeIf { state.showRecommendationsInOverflow },
                 onClickMergedSettings = onMergedSettingsClicked.takeIf { state.manga.source == MERGED_SOURCE_ID },
                 onClickMerge = onMergeClicked.takeIf { state.showMergeInOverflow },
+                onClickSourceSettings = onSourceSettingsClicked,
                 // SY <--
                 onCancelActionMode = { onAllChapterSelected(false) },
                 actionModeCounter = selectedChapterCount,
@@ -1007,8 +1018,14 @@ private fun LazyListScope.sharedChapterItems(
                     read = item.chapter.read,
                     bookmark = item.chapter.bookmark,
                     selected = item.selected,
+                    // SY -->
+                    // 「未上传」的章节（网络图源里服务器上还没有内容的那几话）：淡显，
+                    // 并且不给下载入口 —— 点它会提示「无数据」（拦截在 ui 层的 openChapter）。
+                    unavailable = item.chapter.url.isPendingChapterUrl(),
+                    // SY <--
                     downloadIndicatorEnabled =
-                    !isAnyChapterSelected && !(mergedData?.manga?.get(item.chapter.mangaId) ?: manga).isLocal(),
+                    !isAnyChapterSelected && !(mergedData?.manga?.get(item.chapter.mangaId) ?: manga).isLocal() &&
+                        /* SY --> */ !item.chapter.url.isPendingChapterUrl() /* SY <-- */,
                     downloadStateProvider = { item.downloadState },
                     downloadProgressProvider = { item.downloadProgress },
                     chapterSwipeStartAction = chapterSwipeStartAction,

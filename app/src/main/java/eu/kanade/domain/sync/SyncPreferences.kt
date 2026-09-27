@@ -43,6 +43,36 @@ class SyncPreferences(
         "",
     )
 
+    val aliyunPanRefreshToken: Preference<String> = preferenceStore.getString(
+        Preference.appStateKey("aliyun_pan_refresh_token"),
+        "",
+    )
+
+    val aliyunPanAccessToken: Preference<String> = preferenceStore.getString(
+        Preference.appStateKey("aliyun_pan_access_token"),
+        "",
+    )
+
+    val aliyunPanTokenExpireTime: Preference<Long> = preferenceStore.getLong(
+        Preference.appStateKey("aliyun_pan_token_expire_time"),
+        0L,
+    )
+
+    val aliyunPanUserId: Preference<String> = preferenceStore.getString(
+        Preference.appStateKey("aliyun_pan_user_id"),
+        "",
+    )
+
+    val aliyunPanDriveId: Preference<String> = preferenceStore.getString(
+        Preference.appStateKey("aliyun_pan_drive_id"),
+        "",
+    )
+
+    val aliyunPanDeviceId: Preference<String> = preferenceStore.getString(
+        Preference.appStateKey("aliyun_pan_device_id"),
+        "",
+    )
+
     fun uniqueDeviceID(): String {
         val uniqueIDPreference = preferenceStore.getString(Preference.appStateKey("unique_device_id"), "")
 

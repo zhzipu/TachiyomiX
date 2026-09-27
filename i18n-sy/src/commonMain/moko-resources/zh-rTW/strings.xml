@@ -8,6 +8,8 @@
     <string name="action_clean_titles">清除標題</string>
     <string name="action_start_reading">開始閱讀</string>
     <string name="action_edit_info">編輯資訊</string>
+    <string name="action_source_settings">擴充功能設定</string>
+    <string name="action_modify_source_settings">修改擴充功能設定</string>
     <!-- Entry Type -->
     <string name="entry_type_manga">漫畫(日本)</string>
     <string name="entry_type_manhwa">漫畫(韓國)</string>
@@ -177,17 +179,124 @@
     <string name="pref_source_source_filtering_summery">篩選屬於類別的來源，使屬於某個類別的來源不會被放在語言下</string>
     <string name="pref_source_navigation">取代最新按鈕</string>
     <string name="pref_source_navigation_summery">用一個包括最新和瀏覽的自訂瀏覽檢視取代最新按鈕</string>
+    <string name="pref_source_home_page">圖源首頁</string>
+    <string name="pref_source_home_page_summery">點擊圖源後直接開啟的頁面：%s</string>
+    <string name="pref_source_home_page_navigation">導覽</string>
     <string name="pref_local_source_hidden_folders">本機來源隱藏資料夾</string>
     <string name="pref_local_source_hidden_folders_summery">允許本機源讀取隱藏資料夾</string>
+    <!-- Network source -->
+    <string name="network_source">網路圖源</string>
+    <string name="chapter_no_data">無資料</string>
+    <string name="download_toast_completed">%1$s %2$s 下載完成</string>
+    <string name="upload_toast_completed">%1$s 上傳完成</string>
+    <string name="upload_toast_completed_skipped">%1$s 上傳完成，跳過 %2$s 章（本機沒有檔案）</string>
+    <string name="network_source_protocol">協定</string>
+    <string name="network_source_protocol_webdav">WebDAV</string>
+    <string name="network_source_protocol_ftp">FTP</string>
+    <string name="network_source_server_url">伺服器位址</string>
+    <string name="network_source_server_url_summery">伺服器位址。WebDAV 形如 http://192.168.1.10:5005，FTP 形如 ftp://192.168.1.10:2121。連接埠寫在位址裡（不寫則 WebDAV 用 80/443、FTP 用 21）；庫目錄會自動建在該位址下面。</string>
+    <string name="network_source_username">使用者名稱</string>
+    <string name="network_source_password">密碼</string>
+    <string name="network_source_test_connection">測試連線</string>
+    <string name="network_source_test_connection_summery">檢查位址、帳號密碼與寫入權限：必要時會把庫目錄建出來，然後列一次目錄。</string>
+    <string name="network_source_test_running">正在測試連線…</string>
+    <string name="network_source_test_ok">連線成功，庫中有 %1$d 本漫畫。</string>
+    <string name="network_source_test_ok_empty">連線成功，庫裡還沒有漫畫。</string>
+    <string name="network_source_auto_upload">下載項目自動上傳</string>
+    <string name="network_source_auto_upload_summery">開啟後，書架「下載」分類裡下載完畢的漫畫會自動打包上傳到本圖源的 WebDAV 庫。伺服器上已有同名漫畫時會合併，只補缺少的章節。</string>
+    <string name="network_source_bypass_proxy">不通過軟體代理</string>
+    <string name="network_source_bypass_proxy_summery">建議開啟。直連伺服器，繞過軟體內建代理與手動 HTTP 代理。區域網路裡的 WebDAV（NAS、路由器、本機）透過外網代理節點連不上，表現就是 HTTP 502。只有伺服器在公網、確實需要走代理時才關閉。</string>
+    <string name="network_source_not_configured">網路圖源尚未設定。請先開啟圖源設定填寫主機位址。</string>
+    <string name="network_source_auth_failed">驗證失敗，請檢查使用者名稱與密碼。</string>
+    <string name="network_source_connection_failed">無法連線到伺服器：%s</string>
+    <!-- 上傳到網路圖源的 WebDAV 庫 -->
+    <string name="action_upload">上傳</string>
+    <string name="upload_channel_group">上傳</string>
+    <string name="upload_notifier_title">正在上傳 %s</string>
+    <string name="upload_notifier_progress">已處理 %1$d / %2$d 章</string>
+    <string name="upload_notifier_completed">已上傳 %1$d 章到 %2$s</string>
+    <string name="upload_notifier_failed">%s 上傳失敗</string>
+    <string name="upload_network_source_missing">網路圖源無法使用。</string>
+    <string name="upload_not_configured">網路圖源尚未設定，請先開啟圖源設定填寫連線資訊。</string>
+    <string name="upload_no_downloaded_chapters">沒有已下載的章節可以上傳。</string>
+    <string name="upload_queued">已加入上傳佇列</string>
+    <string name="upload_conflict_title">伺服器上已有同名漫畫</string>
+    <string name="upload_conflict_message">伺服器上已經存在「%1$s」（資料夾 %2$s）。要合併進去，還是新增一個資料夾？</string>
+    <string name="upload_conflict_merge">合併</string>
+    <string name="upload_conflict_new_folder">新增資料夾</string>
+    <string name="library_progress_pages">已下載 %1$d/%2$d 頁</string>
+    <string name="download_category_delete_title">刪除下載</string>
+    <string name="download_category_delete_confirm">刪除</string>
+    <string name="download_category_delete_message">將刪除所選漫畫在本機已下載的章節，並把它們移出「下載」分類。漫畫仍保留在書架的其他分類中。</string>
+    <string name="library_progress_upload_pages">已上傳 %1$d/%2$d 頁</string>
+    <string name="library_progress_chapters">已下載 %1$d/%2$d 話</string>
+    <string name="library_progress_upload_chapters">已上傳 %1$d/%2$d 話</string>
+    <string name="download_continue_all">繼續</string>
+    <string name="download_continue_all_queued">已加入 %1$d 話</string>
+    <string name="download_continue_all_nothing">沒有需要下載的章節</string>
+    <!-- 上傳佇列 -->
+    <string name="label_upload_queue">上傳佇列</string>
+    <string name="information_no_uploads">無上傳作業</string>
+    <string name="action_order_by_title">按標題排序</string>
+    <string name="action_cancel_all_uploads">全部取消</string>
+    <string name="upload_status_queued">排隊中</string>
+    <string name="upload_status_uploading">正在上傳</string>
+    <string name="upload_status_waiting_confirm">等待確認</string>
+    <string name="upload_status_completed">已完成</string>
+    <string name="upload_status_error">上傳失敗</string>
+    <string name="upload_status_cancelled">已取消</string>
+    <string name="upload_queue_summary_paused">已暫停 · 還有 %1$d 話</string>
+    <string name="upload_queue_summary_running">還有 %1$d 話</string>
+    <string name="upload_queue_summary_idle">上傳中…</string>
+    <!-- 拖入上傳佇列 -->
+    <string name="action_add_to_upload_queue">拖入佇列</string>
+    <string name="upload_queue_added">已加入上傳佇列：%1$d 話</string>
+    <string name="upload_manga_queued">已加入上傳佇列：%1$d 本</string>
+    <!-- 上傳佇列裡的「下載」入口 -->
+    <string name="action_download_manager">下載</string>
+
+    <!-- 下載頁的「下載 / 上傳」合併操作 -->
+    <string name="action_pause_all">暫停</string>
+    <string name="action_download">下載</string>
+    <string name="action_upload">上傳</string>
+    <string name="action_download_and_upload">下載和上傳</string>
+    <string name="download_pause_dialog_title">暫停</string>
+    <string name="download_resume_dialog_title">繼續</string>
+    <string name="upload_scope_dialog_title">上傳哪些章節</string>
+    <string name="upload_scope_previous">繼續之前的任務</string>
+    <string name="upload_scope_all">全部章節</string>
+    <string name="action_paused_downloads">已暫停下載</string>
+    <string name="action_paused_uploads">已暫停上傳</string>
+    <string name="action_paused_both">已暫停下載和上傳</string>
+    <!-- 清除 WebDAV 內容 -->
+    <string name="pref_clear_webdav">清除 WebDAV 內容</string>
+    <string name="pref_clear_webdav_summary">刪除伺服器上「TachiyomiX manga」裡的全部內容</string>
+    <string name="pref_clear_webdav_confirm_title">要清除 WebDAV 內容嗎？</string>
+    <string name="pref_clear_webdav_confirm_message">這會永久刪除伺服器上「TachiyomiX manga」裡的所有漫畫資料夾和檔案，刪掉之後無法復原。</string>
+    <string name="pref_clear_webdav_done">已刪除 %1$d 項</string>
+    <string name="pref_clear_webdav_failed">清除失敗：%1$s</string>
+    <string name="action_delete">刪除</string>
     <!-- Backup settings -->
     <string name="custom_entry_info">自訂作品資訊</string>
     <string name="all_read_entries">所有已閱讀的作品</string>
     <string name="label_sync">同步</string>
     <string name="label_triggers">觸發條件</string>
+
+    <!-- About logo easter egg -->
+    <string name="about_logo_tap_1">別點，沒用</string>
+    <string name="about_logo_tap_2">說了別點！</string>
+    <string name="about_logo_tap_3">操你媽(ʘдʘ╬)</string>
+
     <!-- Sync settings -->
     <string name="sync_error">書櫃同步失敗</string>
     <string name="sync_complete">書櫃同步完成</string>
+    <string name="sync_download_failed">下載同步資料失敗：%1$s</string>
     <string name="sync_in_progress">同步已在進行中</string>
+    <string name="sync_missing_etag">缺少 ETag</string>
+    <string name="sync_no_remote_data">遠端伺服器上沒有資料。</string>
+    <string name="sync_success_completed">同步成功完成</string>
+    <string name="sync_updated_remote">遠端資料更新成功</string>
+    <string name="sync_upload_failed">上傳同步資料失敗：%1$s</string>
     <string name="pref_sync_host">主機</string>
     <string name="pref_sync_host_summ">輸入用於同步書櫃的主機地址</string>
     <string name="pref_sync_api_key">API 金鑰</string>
@@ -281,6 +390,7 @@
     <string name="reader_bottom_buttons">閱讀器底部按鈕</string>
     <string name="reader_bottom_buttons_summary">自訂顯示在閱讀器底部的按鈕</string>
     <string name="pref_smooth_scroll">平滑自動翻頁</string>
+    <string name="pref_disable_double_tap_zoom">禁止雙擊縮放</string>
     <!-- Reader -->
     <!-- Reader Actions -->
     <string name="eh_autoscroll">自動翻頁</string>
@@ -374,6 +484,10 @@
     <string name="save_search_delete_message">您確定要刪除您的搜尋查詢：\'%1$s\'？</string>
     <string name="save_search_invalid">儲存的搜尋無效，過濾器已經改變</string>
     <string name="save_search_invalid_name">無效的搜尋名稱</string>
+    <!-- Search History -->
+    <string name="search_history">搜尋歷史</string>
+    <string name="clear_search_history">清除搜尋歷史</string>
+    <string name="add_to_tag">加入標籤列</string>
     <!-- Source Categories -->
     <string name="no_source_categories">沒有可用的來源類別</string>
     <string name="invalid_category_name">無效的類別名稱</string>
@@ -394,7 +508,7 @@
     <string name="delete_tag_confirmation">您想要刪除標籤 %s 嗎？</string>
     <!-- Extension section -->
     <string name="ext_redundant">廢棄</string>
-    <string name="redundant_extension_message">此擴充套件已廢棄，將不會在此版本的 TachiyomiSY 上執行。</string>
+    <string name="redundant_extension_message">此擴充套件已廢棄，將不會在此版本的 TachiyomiX 上執行。</string>
     <!-- Migration -->
     <string name="select_sources">選擇來源</string>
     <string name="select_none">未選擇</string>
@@ -678,4 +792,27 @@
     <string name="final_chapter">終章</string>
     <string name="pref_include_chapter_url_hash">包含章節網址雜湊值</string>
     <string name="pref_include_chapter_url_hash_desc">將章節網址的 MD5 雜湊值前六個字元附加至章節檔案或資料夾名。</string>
+    <string name="aliyun_pan">阿里雲端硬碟</string>
+    <string name="pref_aliyun_pan_sign_in">登入</string>
+    <string name="pref_aliyun_pan_sign_in_summ">使用阿里雲端硬碟 App 掃碼登入，自動取得權杖</string>
+    <string name="aliyun_pan_login_success">已登入阿里雲端硬碟</string>
+    <string name="aliyun_pan_qr_waiting">請用阿里雲端硬碟 App 掃碼登入</string>
+    <string name="aliyun_pan_qr_scanned">已掃碼，請在手機上確認</string>
+    <string name="aliyun_pan_qr_expired">二維碼已過期，請重新整理後重試</string>
+    <string name="aliyun_pan_qr_failed">掃碼登入失敗，請重試</string>
+    <string name="aliyun_pan_qr_refresh">重新整理二維碼</string>
+    <string name="aliyun_pan_qr_save">儲存至相簿</string>
+    <string name="aliyun_pan_qr_saved">二維碼已儲存至相簿</string>
+    <string name="aliyun_pan_qr_save_failed">二維碼儲存至相簿失敗</string>
+    <string name="pref_aliyun_pan_refresh_token">重新整理權杖</string>
+    <string name="pref_aliyun_pan_refresh_token_summ">通常可透過上方登入自動取得。也可手動填入：從阿里雲端硬碟網頁版取得（開發者工具 → 本地儲存 → token → refresh_token），或透過 aliyunpan 命令列工具（aliyunpan login）取得</string>
+    <string name="pref_aliyun_pan_test_connection">測試連線</string>
+    <string name="aliyun_pan_connection_test_success">阿里雲端硬碟連線成功</string>
+    <string name="aliyun_pan_connection_test_failed">阿里雲端硬碟連線失敗</string>
+    <string name="pref_aliyun_pan_purge_sync_data">清除阿里雲端硬碟中的同步資料</string>
+    <string name="aliyun_pan_sync_data_purged">同步資料已從阿里雲端硬碟清除</string>
+    <string name="aliyun_pan_sync_data_not_found">未能在阿里雲端硬碟找到同步的資料</string>
+    <string name="aliyun_pan_sync_data_purge_error">從阿里雲端硬碟清除同步的資料失敗</string>
+    <string name="aliyun_pan_not_configured">尚未設定阿里雲端硬碟</string>
+    <string name="pref_purge_confirmation_aliyun_pan_message">清除同步資料會從阿里雲端硬碟刪除所有已同步的資料，確定要繼續嗎？</string>
 </resources>

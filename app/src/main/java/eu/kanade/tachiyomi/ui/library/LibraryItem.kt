@@ -18,13 +18,19 @@ data class LibraryItem(
     val id: Long = libraryManga.id
 
     /**
+     * Name of the source the manga comes from, e.g. "MangaDex".
+     */
+    val sourceName: String by lazy {
+        sourceManager.getOrStub(libraryManga.manga.source).getNameForMangaInfo()
+    }
+
+    /**
      * Checks if a query matches the manga
      *
      * @param constraint the query to check.
      * @return true if the manga matches the query, false otherwise.
      */
     fun matches(constraint: String): Boolean {
-        val sourceName by lazy { sourceManager.getOrStub(libraryManga.manga.source).getNameForMangaInfo() }
         if (constraint.startsWith("id:", true)) {
             return id == constraint.substringAfter("id:").toLongOrNull()
         }

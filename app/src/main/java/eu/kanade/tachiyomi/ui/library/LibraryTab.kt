@@ -4,17 +4,23 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -29,19 +35,26 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
+import eu.kanade.presentation.library.DeleteDownloadsDialog
 import eu.kanade.presentation.library.DeleteLibraryMangaDialog
 import eu.kanade.presentation.library.LibrarySettingsDialog
+import eu.kanade.presentation.library.components.ContinueAllActionRow
+import eu.kanade.presentation.library.components.ContinueStage
 import eu.kanade.presentation.library.components.LibraryContent
+import eu.kanade.presentation.library.components.LibraryDownloadControls
 import eu.kanade.presentation.library.components.LibraryToolbar
 import eu.kanade.presentation.library.components.SyncFavoritesConfirmDialog
 import eu.kanade.presentation.library.components.SyncFavoritesProgressDialog
 import eu.kanade.presentation.library.components.SyncFavoritesWarningDialog
+import eu.kanade.presentation.library.components.UploadConflictDialog
 import eu.kanade.presentation.manga.components.LibraryBottomActionMenu
 import eu.kanade.presentation.more.onboarding.GETTING_STARTED_URL
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
 import eu.kanade.tachiyomi.data.sync.SyncDataJob
+import eu.kanade.tachiyomi.data.upload.UploadChoice
+import eu.kanade.tachiyomi.data.upload.isDownloadCategory
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
 import eu.kanade.tachiyomi.ui.category.CategoryScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
@@ -106,6 +119,29 @@ data object LibraryTab : Tab {
 
         val snackbarHostState = remember { SnackbarHostState() }
 
+        // SY -->
+        // 「下载」分类顶栏左上角的「继续 / 暂停」。
+        //
+        // 按钮必须画在顶栏里，而「现在是不是『下载』分类」只有 `LibraryContent`
+        // 知道（它拿着 pagerState），所以这个值由那边回传上来。
+        var showDownloadControls by remember { mutableStateOf(false) }
+        // 「继续」弹窗：第一层选操作对象，第二层（选了「上传」才进）选上传范围
+        var showContinueDialog by remember { mutableStateOf(false) }
+        var continueStage by remember { mutableStateOf(ContinueStage.PICK_TARGET) }
+        var showPauseDialog by remember { mutableStateOf(false) }
+
+        /** 选「上传」时把已下载完的漫画排进上传队列（按本地内容重新扫一遍）。 */
+        val enqueueAllForUpload: () -> Unit = {
+            val count = screenModel.enqueueAllDownloadedForUpload()
+            val message = if (count > 0) {
+                context.stringResource(SYMR.strings.upload_manga_queued, count)
+            } else {
+                context.stringResource(SYMR.strings.download_continue_all_nothing)
+            }
+            scope.launch { snackbarHostState.showSnackbar(message) }
+        }
+        // SY <--
+
         val onClickRefresh: (Category?) -> Boolean = { category ->
             // SY -->
             val started = LibraryUpdateJob.startNow(
@@ -150,7 +186,7 @@ data object LibraryTab : Tab {
                     onClickGlobalUpdate = { onClickRefresh(null) },
                     onClickOpenRandomManga = {
                         scope.launch {
-                            val randomItem = screenModel.getRandomLibraryItemForCurrentCategory()
+                            val randomItem = screenModel.getRandomLibraryItem()
                             if (randomItem != null) {
                                 navigator.push(MangaScreen(randomItem.libraryManga.manga.id))
                             } else {
@@ -170,6 +206,21 @@ data object LibraryTab : Tab {
                     // SY -->
                     onClickSyncExh = screenModel::openFavoritesSyncDialog.takeIf { state.showSyncExh },
                     isSyncEnabled = state.isSyncEnabled,
+                    // 「下载」分类里，左上角放「继续 / 暂停」两个图标按钮。
+                    // 其余分类传 null，左上角保持空白（书架是顶层页签，本来就没有返回箭头）。
+                    navigationContent = if (showDownloadControls) {
+                        {
+                            LibraryDownloadControls(
+                                onContinue = {
+                                    continueStage = ContinueStage.PICK_TARGET
+                                    showContinueDialog = true
+                                },
+                                onPause = { showPauseDialog = true },
+                            )
+                        }
+                    } else {
+                        null
+                    },
                     // SY <--
                     searchQuery = state.searchQuery,
                     onSearchQueryChange = screenModel::search,
@@ -178,13 +229,27 @@ data object LibraryTab : Tab {
                 )
             },
             bottomBar = {
+                // SY -->
+                // 底部那个按钮按当前分类切换：书架「下载」分类里是「上传」，
+                // 其余分类保持原来的「下载」下拉菜单。
+                // 没有分类页签时（例如全局搜索）`activeCategory` 为 null，按「非下载分类」处理。
+                val inDownloadCategory = state.activeCategory?.isDownloadCategory == true
+                // SY <--
                 LibraryBottomActionMenu(
                     visible = state.selectionMode,
                     onChangeCategoryClicked = screenModel::openChangeCategoryDialog,
                     onMarkAsReadClicked = { screenModel.markReadSelection(true) },
                     onMarkAsUnreadClicked = { screenModel.markReadSelection(false) },
+                    // SY -->
                     onDownloadClicked = screenModel::performDownloadAction
-                        .takeIf { state.selectedManga.fastAll { !it.isLocal() } },
+                        .takeIf { !inDownloadCategory && state.selectedManga.fastAll { !it.isLocal() } },
+                    onUploadClicked = screenModel::performUploadAction
+                        .takeIf { inDownloadCategory },
+                    // 网络图源没填服务器信息时，上传按钮置灰（点了也没有意义）；
+                    // 另外所选漫画里**至少要有一本存在已下载完成的章节**，否则同样没东西可传。
+                    uploadEnabled = state.isUploadAvailable &&
+                        state.selectedManga.fastAny { screenModel.hasDownloadedChapters(it) },
+                    // SY <--
                     onDeleteClicked = screenModel::openDeleteMangaDialog,
                     onMigrateClicked = {
                         val selection = state.selectedManga
@@ -269,6 +334,14 @@ data object LibraryTab : Tab {
                         getDisplayMode = { screenModel.getDisplayMode() },
                         getColumnsForOrientation = { screenModel.getColumnsForOrientation(it) },
                         getItemsForCategory = { state.getItemsForCategory(it) },
+                        // SY -->
+                        // 书架「下载」分类的进度条数据（其它分类不会用到）
+                        getMangaProgress = { state.progressFor(it) },
+                        // 「继续 / 暂停」按钮画在顶栏（见上面的 navigationContent），
+                        // 这里只开关 + 回传「当前页是不是『下载』分类」
+                        showDownloadControls = true,
+                        onDownloadControlsVisibleChange = { showDownloadControls = it },
+                        // SY <--
                     )
                 }
             }
@@ -303,14 +376,30 @@ data object LibraryTab : Tab {
             }
 
             is LibraryScreenModel.Dialog.DeleteManga -> {
-                DeleteLibraryMangaDialog(
-                    containsLocalManga = dialog.manga.any(Manga::isLocal),
-                    onDismissRequest = onDismissRequest,
-                    onConfirm = { deleteManga, deleteChapter ->
-                        screenModel.removeMangas(dialog.manga, deleteManga, deleteChapter)
-                        screenModel.clearSelection()
-                    },
-                )
+                // SY -->
+                if (dialog.downloadsOnly) {
+                    // 「下载」分类里：只清本地下载、把这本漫画移出「下载」，书架归属不动，
+                    // 所以没有勾选项可问，二次确认一次即可。
+                    DeleteDownloadsDialog(
+                        onDismissRequest = onDismissRequest,
+                        onConfirm = {
+                            screenModel.removeDownloadedMangas(dialog.manga)
+                            screenModel.clearSelection()
+                        },
+                    )
+                } else {
+                    // SY <--
+                    DeleteLibraryMangaDialog(
+                        containsLocalManga = dialog.manga.any(Manga::isLocal),
+                        onDismissRequest = onDismissRequest,
+                        onConfirm = { deleteManga, deleteChapter ->
+                            screenModel.removeMangas(dialog.manga, deleteManga, deleteChapter)
+                            screenModel.clearSelection()
+                        },
+                    )
+                    // SY -->
+                }
+                // SY <--
             }
             // SY -->
             LibraryScreenModel.Dialog.SyncFavoritesWarning -> {
@@ -359,6 +448,169 @@ data object LibraryTab : Tab {
             setStatusIdle = { screenModel.recommendationSearch.status.value = SearchStatus.Idle },
             setStatusCancelling = { screenModel.recommendationSearch.status.value = SearchStatus.Cancelling },
         )
+
+        // 手动上传遇到「服务器上已有同名漫画」时弹窗等用户选合并还是新建。
+        // 这时 UploadManager 正挂起等答案（见 UploadManager.askConflict）。
+        val pendingUpload by screenModel.pendingUploadDecision.collectAsState()
+        pendingUpload?.let { decision ->
+            UploadConflictDialog(
+                decision = decision,
+                onMerge = { screenModel.resolveUploadDecision(UploadChoice.MERGE) },
+                onNewFolder = { screenModel.resolveUploadDecision(UploadChoice.NEW_FOLDER) },
+                onDismissRequest = { screenModel.resolveUploadDecision(UploadChoice.CANCEL) },
+            )
+        }
+
+        // 「下载」分类顶栏那个「继续」按钮的弹窗。
+        //
+        // 两层：
+        // 1. 选操作对象 —— 下载 / 上传 / 下载和上传（点弹窗外部或取消按钮退出）
+        // 2. 选了「上传」之后再选范围 —— **继续之前的任务**（接着上次退出时留下的
+        //    上传队列跑，不再重新扫描本地）还是**全部章节**（按本地已下载的内容
+        //    重新排一遍，等价于新开一批上传）
+        //
+        // 上传那两项只在网络图源配置好了时给点：没配服务器点了只会收到失败通知，
+        // 和书架多选里「上传」按钮置灰是同一个判据。
+        if (showContinueDialog) {
+            when (continueStage) {
+                ContinueStage.PICK_TARGET -> AlertDialog(
+                    onDismissRequest = { showContinueDialog = false },
+                    title = { Text(text = stringResource(SYMR.strings.download_continue_all)) },
+                    text = {
+                        Column {
+                            ContinueAllActionRow(
+                                text = stringResource(SYMR.strings.action_download),
+                                onClick = {
+                                    showContinueDialog = false
+                                    scope.launch {
+                                        val queued = screenModel.enqueueAllUnfinishedDownloads()
+                                        val message = if (queued > 0) {
+                                            context.stringResource(
+                                                SYMR.strings.download_continue_all_queued,
+                                                queued,
+                                            )
+                                        } else {
+                                            context.stringResource(SYMR.strings.download_continue_all_nothing)
+                                        }
+                                        snackbarHostState.showSnackbar(message)
+                                    }
+                                },
+                            )
+                            ContinueAllActionRow(
+                                text = stringResource(SYMR.strings.action_upload),
+                                enabled = state.isUploadAvailable,
+                                onClick = { continueStage = ContinueStage.PICK_UPLOAD_SCOPE },
+                            )
+                            ContinueAllActionRow(
+                                text = stringResource(SYMR.strings.action_download_and_upload),
+                                enabled = state.isUploadAvailable,
+                                onClick = {
+                                    showContinueDialog = false
+                                    continueStage = ContinueStage.PICK_TARGET
+                                    scope.launch {
+                                        val queued = screenModel.enqueueAllUnfinishedDownloads()
+                                        val message = if (queued > 0) {
+                                            context.stringResource(
+                                                SYMR.strings.download_continue_all_queued,
+                                                queued,
+                                            )
+                                        } else {
+                                            context.stringResource(SYMR.strings.download_continue_all_nothing)
+                                        }
+                                        snackbarHostState.showSnackbar(message)
+                                    }
+                                    enqueueAllForUpload()
+                                },
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showContinueDialog = false }) {
+                            Text(text = stringResource(MR.strings.action_cancel))
+                        }
+                    },
+                )
+
+                ContinueStage.PICK_UPLOAD_SCOPE -> AlertDialog(
+                    onDismissRequest = {
+                        showContinueDialog = false
+                        continueStage = ContinueStage.PICK_TARGET
+                    },
+                    title = { Text(text = stringResource(SYMR.strings.upload_scope_dialog_title)) },
+                    text = {
+                        Column {
+                            ContinueAllActionRow(
+                                text = stringResource(SYMR.strings.upload_scope_previous),
+                                onClick = {
+                                    showContinueDialog = false
+                                    continueStage = ContinueStage.PICK_TARGET
+                                    // 接着上次退出时留下的队列跑：`startUploads()` 会放开
+                                    // 「恢复队列等用户点继续」那个闸门（见 UploadManager）。
+                                    screenModel.resumeUploads()
+                                },
+                            )
+                            ContinueAllActionRow(
+                                text = stringResource(SYMR.strings.upload_scope_all),
+                                onClick = {
+                                    showContinueDialog = false
+                                    continueStage = ContinueStage.PICK_TARGET
+                                    enqueueAllForUpload()
+                                },
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showContinueDialog = false
+                                continueStage = ContinueStage.PICK_TARGET
+                            },
+                        ) {
+                            Text(text = stringResource(MR.strings.action_cancel))
+                        }
+                    },
+                )
+            }
+        }
+
+        // 「暂停」弹窗：与「继续」对称，同样三选（下载 / 上传 / 下载和上传）。
+        // 上传和下载是互不影响的独立开关，所以「暂停上传」不会停掉正在跑的下载。
+        if (showPauseDialog) {
+            AlertDialog(
+                onDismissRequest = { showPauseDialog = false },
+                title = { Text(text = stringResource(SYMR.strings.download_pause_dialog_title)) },
+                text = {
+                    Column {
+                        ContinueAllActionRow(
+                            text = stringResource(SYMR.strings.action_download),
+                            onClick = {
+                                showPauseDialog = false
+                                screenModel.pauseDownloads()
+                            },
+                        )
+                        ContinueAllActionRow(
+                            text = stringResource(SYMR.strings.action_upload),
+                            onClick = {
+                                showPauseDialog = false
+                                screenModel.pauseUploads()
+                            },
+                        )
+                        ContinueAllActionRow(
+                            text = stringResource(SYMR.strings.action_download_and_upload),
+                            onClick = {
+                                showPauseDialog = false
+                                screenModel.pauseDownloadsAndUploads()
+                            },
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPauseDialog = false }) {
+                        Text(text = stringResource(MR.strings.action_cancel))
+                    }
+                },
+            )
+        }
         // SY <--
 
         BackHandler(enabled = state.selectionMode || state.searchQuery != null) {

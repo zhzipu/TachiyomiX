@@ -92,7 +92,7 @@ private fun DialogRow(
             .clip(MaterialTheme.shapes.small)
             .selectable(
                 selected = isSelected,
-                onClick = { if (!isSelected) onSelected() },
+                onClick = { onSelected() },
             )
             .fillMaxWidth()
             .minimumInteractiveComponentSize(),

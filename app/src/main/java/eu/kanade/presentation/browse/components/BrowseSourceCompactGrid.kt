@@ -4,9 +4,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -32,11 +34,29 @@ fun BrowseSourceCompactGrid(
     mangaList: LazyPagingItems<StateFlow</* SY --> */Pair<Manga, RaisedSearchMetadata?>/* SY <-- */>>,
     columns: GridCells,
     contentPadding: PaddingValues,
+    // SY -->
+    selection: List<Manga> = emptyList(),
+    // SY <--
+    state: LazyGridState,
+    // SY -->
+    // 递增时通知当前页面的列表回到顶部
+    scrollToTopNonce: Int = 0,
+    isCurrentPage: Boolean = true,
+    // SY <--
     onMangaClick: (Manga) -> Unit,
     onMangaLongClick: (Manga) -> Unit,
 ) {
+    // SY -->
+    // 点击顶部图源名称时，列表带动画回到顶部
+    LaunchedEffect(scrollToTopNonce) {
+        if (scrollToTopNonce > 0 && isCurrentPage) {
+            state.animateScrollToItem(0)
+        }
+    }
+    // SY <--
     LazyVerticalGrid(
         columns = columns,
+        state = state,
         contentPadding = contentPadding + PaddingValues(8.dp),
         verticalArrangement = Arrangement.spacedBy(CommonMangaItemDefaults.GridVerticalSpacer),
         horizontalArrangement = Arrangement.spacedBy(CommonMangaItemDefaults.GridHorizontalSpacer),
@@ -52,12 +72,14 @@ fun BrowseSourceCompactGrid(
             val pair by mangaList[index]?.collectAsState() ?: return@items
             val manga = pair.first
             val metadata = pair.second
+            val isSelected = selection.any { it.id == manga.id }
             // SY <--
 
             BrowseSourceCompactGridItem(
                 manga = manga,
                 // SY -->
                 metadata = metadata,
+                isSelected = isSelected,
                 // SY <--
                 onClick = { onMangaClick(manga) },
                 onLongClick = { onMangaLongClick(manga) },
@@ -77,11 +99,13 @@ private fun BrowseSourceCompactGridItem(
     manga: Manga,
     // SY -->
     metadata: RaisedSearchMetadata?,
+    isSelected: Boolean = false,
     // SY <--
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = onClick,
 ) {
     MangaCompactGridItem(
+        isSelected = isSelected,
         title = manga.title,
         coverData = MangaCover(
             mangaId = manga.id,

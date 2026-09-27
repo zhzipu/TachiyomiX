@@ -35,6 +35,7 @@ import mihon.domain.extension.interactor.AddExtensionStore
 import mihon.domain.extension.interactor.GetExtensionStoreCountAsFlow
 import mihon.domain.extension.interactor.GetExtensionStores
 import mihon.domain.extension.interactor.RemoveExtensionStore
+import mihon.domain.extension.interactor.SetExtensionStoreEnabled
 import mihon.domain.extension.interactor.UpdateExtensionStores
 import mihon.domain.extension.repository.ExtensionStoreRepository
 import mihon.domain.migration.usecases.MigrateMangaUseCase
@@ -200,6 +201,7 @@ class DomainModule : InjektModule {
         addFactory { GetExtensionStoreCountAsFlow(get()) }
         addFactory { GetExtensionStores(get()) }
         addFactory { RemoveExtensionStore(get()) }
+        addFactory { SetExtensionStoreEnabled(get()) }
         addFactory { UpdateExtensionStores(get()) }
 
         addFactory { ToggleIncognito(get()) }

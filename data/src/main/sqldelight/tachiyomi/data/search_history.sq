@@ -1,0 +1,30 @@
+CREATE TABLE search_history (
+    _id INTEGER NOT NULL PRIMARY KEY,
+    scope TEXT NOT NULL,
+    query TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+CREATE INDEX search_history_scope_index ON search_history(scope);
+
+selectByScope:
+SELECT query FROM search_history WHERE scope = :scope ORDER BY _id DESC LIMIT :limit;
+
+insert:
+INSERT INTO search_history (scope, query) VALUES (:scope, :query);
+
+deleteByScopeAndQuery:
+DELETE FROM search_history WHERE scope = :scope AND query = :query;
+
+deleteByScope:
+DELETE FROM search_history WHERE scope = :scope;
+
+deleteOutOfLimit:
+DELETE FROM search_history
+WHERE scope = :scope
+AND _id NOT IN (
+    SELECT _id FROM search_history WHERE scope = :scope ORDER BY _id DESC LIMIT :limit
+);
+
+deleteAll:
+DELETE FROM search_history;

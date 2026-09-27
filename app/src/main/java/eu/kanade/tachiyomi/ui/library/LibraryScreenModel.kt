@@ -24,8 +24,16 @@ import eu.kanade.presentation.manga.DownloadAction
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadCache
 import eu.kanade.tachiyomi.data.download.DownloadManager
+import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.track.TrackStatus
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.upload.DownloadCategory
+import eu.kanade.tachiyomi.data.upload.isDownloadCategory
+import eu.kanade.tachiyomi.data.upload.LibraryMangaProgress
+import eu.kanade.tachiyomi.data.upload.UploadChoice
+import eu.kanade.tachiyomi.data.upload.UploadManager
+import eu.kanade.tachiyomi.data.upload.UploadPendingDecision
+import eu.kanade.tachiyomi.data.upload.UploadStatus
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -54,7 +62,9 @@ import exh.util.isLewd
 import exh.util.nullIfBlank
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -110,9 +120,11 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
 import tachiyomi.source.local.LocalSource
 import tachiyomi.source.local.isLocal
+import tachiyomi.source.network.config.isPendingChapterUrl
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import kotlin.random.Random
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class LibraryScreenModel(
@@ -131,6 +143,10 @@ class LibraryScreenModel(
     private val sourceManager: SourceManager = Injekt.get(),
     private val downloadManager: DownloadManager = Injekt.get(),
     private val downloadCache: DownloadCache = Injekt.get(),
+    // SY -->
+    private val downloadCategory: DownloadCategory = Injekt.get(),
+    private val uploadManager: UploadManager = Injekt.get(),
+    // SY <--
     private val trackerManager: TrackerManager = Injekt.get(),
     // SY -->
     private val exhPreferences: ExhPreferences = Injekt.get(),
@@ -159,6 +175,46 @@ class LibraryScreenModel(
         mutableState.update { state ->
             state.copy(activeCategoryIndex = libraryPreferences.lastUsedCategory.get())
         }
+
+        // SY -->
+        // 「下载」分类常驻：书架一打开就确保它存在
+        // （用户在「分类管理」里把它删了也会在下次打开书架时补回来）
+        screenModelScope.launchIO { downloadCategory.ensureId() }
+
+        // 书架「下载」分类下进度条的数据源。
+        //
+        // 下载进度是 `Download.progress` 就地改的，没有会发射的 Flow 可以订阅，
+        // 所以这里用固定节拍采样；只有结果真的变了才写状态，
+        // 空闲时（没有下载也没有上传）几乎是零开销。
+        screenModelScope.launchIO {
+            while (true) {
+                val next = buildLibraryProgress()
+                if (next != mutableState.value.libraryProgress) {
+                    mutableState.update { it.copy(libraryProgress = next) }
+                }
+                delay(LIBRARY_PROGRESS_TICK)
+            }
+        }
+
+        // 「上传」按钮能不能点（网络图源有没有填服务器信息）。
+        //
+        // 这个值的来源是图源自己那份 SharedPreferences，没有可订阅的 Flow；而书架页签是
+        // 常驻的，用户去图源设置里改完之后返回书架并不会让这个 ScreenModel 重建，
+        // 所以同样用固定节拍采样。一次 SharedPreferences 读取 + 一次 map 查找，
+        // 节拍放慢到 1s，代价可以忽略。
+        // 先同步取一次，避免首帧把上传按钮画成灰的。
+        mutableState.update { it.copy(isUploadAvailable = uploadManager.isUploadAvailable()) }
+        screenModelScope.launchIO {
+            while (true) {
+                val available = uploadManager.isUploadAvailable()
+                if (available != mutableState.value.isUploadAvailable) {
+                    mutableState.update { it.copy(isUploadAvailable = available) }
+                }
+                delay(UPLOAD_AVAILABILITY_TICK)
+            }
+        }
+        // SY <--
+
         screenModelScope.launchIO {
             combine(
                 combine(
@@ -718,7 +774,11 @@ class LibraryScreenModel(
             getMergedChaptersByMangaId.await(manga.id, applyScanlatorFilter = true)
         } else {
             getChaptersByMangaId.await(manga.id, applyScanlatorFilter = true)
-        }.getNextUnread(manga, downloadManager, mergedManga)
+        }
+            // SY --> 「未上传」的章节没有内容，不该成为「继续阅读」的目标
+            .filterNot { it.url.isPendingChapterUrl() }
+            // SY <--
+            .getNextUnread(manga, downloadManager, mergedManga)
         // SY <--
     }
 
@@ -743,10 +803,266 @@ class LibraryScreenModel(
             DownloadAction.NEXT_5_CHAPTERS -> downloadNextChapters(5)
             DownloadAction.NEXT_10_CHAPTERS -> downloadNextChapters(10)
             DownloadAction.NEXT_25_CHAPTERS -> downloadNextChapters(25)
+            DownloadAction.ALL_CHAPTERS -> downloadAllChapters()
             DownloadAction.UNREAD_CHAPTERS -> downloadNextChapters(null)
             DownloadAction.BOOKMARKED_CHAPTERS -> downloadBookmarkedChapters()
         }
         clearSelection()
+    }
+
+    /**
+     * 书架多选状态下点「上传」：把所选漫画已下载的章节打包上传到网络图源的 WebDAV 库。
+     *
+     * 服务器上已经有同名漫画时会弹窗问「合并还是新建」（`UploadManager.pendingDecision`），
+     * 界面上由 `LibraryTab` 里那个对话框负责回答。
+     */
+    fun performUploadAction() {
+        val mangas = state.value.selectedManga
+        if (mangas.isNotEmpty()) {
+            uploadManager.enqueue(mangas.map { it.id }, askOnConflict = true)
+        }
+        clearSelection()
+    }
+
+    /**
+     * 这本漫画有没有**至少一章已经下载完成**。
+     *
+     * 「下载」分类下的「上传」按钮据此置灰：一章都没下完就没什么可传的
+     * （`UploadManager.runUpload` 里也有一道同样的守卫，这里只是提前拦住，不让点）。
+     *
+     * `DownloadCache.getDownloadCount` 数的是**落盘好的**章节目录，`_tmp`（下到一半的）
+     * 已经被它排除掉了，所以这个判断等价于「有下载完成的章节」。
+     * 它内部只是一次内存查表（`renewCache` 自带节流），非挂起、可在组合期间调用。
+     */
+    fun hasDownloadedChapters(manga: Manga): Boolean = downloadManager.getDownloadCount(manga) > 0
+
+    // SY -->
+    /** 非空表示有上传正挂在服务器同名冲突上等用户拍板，界面据此弹窗。 */
+    val pendingUploadDecision: StateFlow<UploadPendingDecision?> = uploadManager.pendingDecision
+
+    /** 用户在冲突弹窗里选了之后交回给 [UploadManager]。 */
+    fun resolveUploadDecision(choice: UploadChoice) {
+        uploadManager.resolveDecision(choice)
+    }
+
+    /**
+     * 「下载」分类右下角悬浮「继续」按钮的动作：把该分类**所有**漫画的
+     * 「未完成章节 + 未下载章节」一次性加入下载队列。
+     *
+     * 「该分类里有哪些漫画」直接取当前界面所见的那批（受搜索 / 过滤影响），
+     * 这样按钮行为和眼睛看到的一致 —— 用户过滤出 3 本，就只给这 3 本续上。
+     *
+     * 「未完成」和「未下载」在这里是**同一个判据**，因为入队前只做三件事：
+     * 1. 「未上传」的章节跳过（网络图源里只有元数据、没有图可下，
+     *    判据与 `getNextUnreadChapter` 一致）
+     * 2. 已经在队列里的跳过（否则会重复排队；部分下载 / 失败重试本来就还在队列里）
+     * 3. 本地已经下载完成的跳过（`isChapterDownloaded`）
+     * 剩下的无论「从没下过」还是「下了一半被中断」，交给
+     * [DownloadManager.downloadChapters] 后都会从该章的第一页重跑，
+     * 对下到一半的章节是覆盖续下，不会产生半截文件。
+     *
+     * 只取「未读」章节（`getNextChapters` 的默认口径），与书架多选里的
+     * 「未读章节」一致 —— 已读的老章节不在这里回填。
+     *
+     * 合并图源要按子漫画拆开入队（章节归属于各自的子漫画），写法与
+     * [downloadNextChapters] 保持一致。
+     *
+     * 返回实际入队的章节数；为 0 表示没有可下载的章节，界面据此给个提示。
+     */
+    suspend fun enqueueAllUnfinishedDownloads(): Int {
+        val items = mutableState.value.downloadCategoryItems
+        if (items.isEmpty()) return 0
+
+        // 队列整体查一次，去重判断就不用每章扫一遍队列表（书架可能上千本）。
+        val queuedChapterIds: Set<Long> = downloadManager.queueState.value
+            .map { it.chapter.id }
+            .toHashSet()
+
+        var queued = 0
+        items.fastForEach { item ->
+            val manga = item.libraryManga.manga
+
+            if (manga.source == MERGED_SOURCE_ID) {
+                val mergedMangas = getMergedMangaById.await(manga.id).associateBy { it.id }
+                getNextChapters.await(manga.id)
+                    .groupBy { it.mangaId }
+                    .forEach ab@{ (mangaId, chapters) ->
+                        val mergedManga = mergedMangas[mangaId] ?: return@ab
+                        val toQueue: List<Chapter> = chapters.fastFilterNot { chapter ->
+                            chapter.id in queuedChapterIds ||
+                                chapter.url.isPendingChapterUrl() ||
+                                downloadManager.isChapterDownloaded(
+                                    chapter.name,
+                                    chapter.scanlator,
+                                    chapter.url,
+                                    mergedManga.ogTitle,
+                                    mergedManga.source,
+                                )
+                        }
+                        if (toQueue.isNotEmpty()) {
+                            downloadManager.downloadChapters(mergedManga, toQueue)
+                            queued += toQueue.size
+                        }
+                    }
+                return@fastForEach
+            }
+
+            val toQueue: List<Chapter> = getNextChapters.await(manga.id)
+                .fastFilterNot { chapter ->
+                    chapter.id in queuedChapterIds ||
+                        chapter.url.isPendingChapterUrl() ||
+                        downloadManager.isChapterDownloaded(
+                            chapter.name,
+                            chapter.scanlator,
+                            chapter.url,
+                            manga.ogTitle,
+                            manga.source,
+                        )
+                }
+            if (toQueue.isNotEmpty()) {
+                downloadManager.downloadChapters(manga, toQueue)
+                queued += toQueue.size
+            }
+        }
+        return queued
+    }
+
+    /**
+     * 「下载」分类右下角悬浮「继续」→ 弹窗里选「上传」/「下载和上传」时的动作：
+     * 把该分类里**已经下载完成**的漫画一次性排进上传队列。
+     *
+     * 与 [enqueueAllUnfinishedDownloads] 共用「当前界面所见的那批」口径（受搜索 / 过滤影响），
+     * 这样按钮行为和眼睛看到的一致。
+     *
+     * 只需筛「有没有下载完的章节」：`UploadManager.enqueue` 内部会自己展开成
+     * 「一话一个任务」并跳过本地没内容的那些，所以这里不用把章节列出来 ——
+     * 反而不能自己先展开，否则会绕开 `UploadManager` 里那套批次记账
+     *（见 `MangaBatchState`：收尾写 config.json 靠的就是它）。
+     *
+     * `askOnConflict = true`：这是用户主动点的，服务器上若已有同名漫画应当让他自己选
+     * 「合并」还是「新建」。（自动上传那条路才用 false。）
+     *
+     * 返回实际排队的漫画本数；为 0 表示这本都没有可传的。
+     */
+    fun enqueueAllDownloadedForUpload(): Int {
+        val ids = mutableState.value.downloadCategoryItems
+            .map { it.libraryManga.manga }
+            .filter { downloadManager.getDownloadCount(it) > 0 }
+            .map { it.id }
+
+        if (ids.isEmpty()) return 0
+        uploadManager.enqueue(ids.distinct(), askOnConflict = true)
+        return ids.size
+    }
+
+    /** 网络图源配置好了没有，供「继续」弹窗把「上传」两项置灰。 */
+    fun isUploadAvailable(): Boolean = uploadManager.isUploadAvailable()
+
+    /**
+     * 「继续」弹窗 → 上传 → 「继续之前的任务」。
+     *
+     * 与 [enqueueAllDownloadedForUpload] 的区别是**不重新扫描本地**：直接把上次退出时
+     * 留下的上传队列接着跑。队列本身在 `UploadManager` 恢复时就已经重建好了
+     *（`restoreQueue`），只是被 `restoredQueuePendingResume` 闸门挡着等用户点继续；
+     * `startUploads()` 正好放开它（见 `UploadManager.restoredQueuePendingResume`）。
+     *
+     * 队列为空时这也是个安全的空操作 —— 只是把「上传正在跑」这个开关打开。
+     */
+    fun resumeUploads() {
+        uploadManager.startUploads()
+    }
+
+    /** 「暂停」弹窗 → 下载。只停下载，正在传的上传不受影响。 */
+    fun pauseDownloads() {
+        downloadManager.pauseDownloads()
+    }
+
+    /** 「暂停」弹窗 → 上传。只停止开始新的一话，正在传的那一话会传完。 */
+    fun pauseUploads() {
+        uploadManager.pauseUploads()
+    }
+
+    /** 「暂停」弹窗 → 下载和上传。 */
+    fun pauseDownloadsAndUploads() {
+        downloadManager.pauseDownloads()
+        uploadManager.pauseUploads()
+    }
+    // SY <--
+
+    /**
+     * 汇总书架「下载」分类下每个项目当前的下载 / 上传活动情况。
+     *
+     * 下载侧取「正在跑（或排在队首）那一章」的页数：书架那条进度条就是
+     * 「已下载页数 / 下载总页数」。
+     *
+     * 同时算出**章节口径**那一条（画在页数条下面）：已下载章节数 /
+     * （已下载 + 队列中未下载）章节数。用户明确要求**不在队列中的章节不算**，
+     * 所以这里分子分母都只看「本地已下好的」和「已经在队列里的」两类，
+     * 没入队的章节既不进分子也不进分母。
+     *
+     * 下载与上传都空闲时返回空表，所以书架上绝大多数项目连进度数据都不会分配。
+     */
+    private fun buildLibraryProgress(): Map<Long, LibraryMangaProgress> {
+        val queue = downloadManager.queueState.value
+        val downloads = queue
+            .filter { it.status == Download.State.DOWNLOADING || it.status == Download.State.QUEUE }
+            .groupBy { it.manga.id }
+        val uploads = uploadManager.state.value
+
+        val ids = downloads.keys + uploads.keys
+        if (ids.isEmpty()) return emptyMap()
+
+        // SY -->
+        // 「队列里还没下完的章节数」按 manga 分组数一次就够，下面的循环只是查表。
+        // 注意 `downloads` 已经滤掉了 COMPLETE / ERROR 等终态，两者口径一致：
+        // 刚从队列里下完的那一章会立刻转到 `DownloadCache` 里被 `getDownloadCount` 数到，
+        // 所以进度不会出现「两头都不算」的空档。
+        val pendingByManga = downloads.mapValues { (_, queued) -> queued.size }
+        // SY <--
+
+        return ids.associateWith { id ->
+            // 优先取真正在跑的那章；都在排队时取队首，这样点下下载就能看到进度条。
+            val active = downloads[id]?.let { queued ->
+                queued.firstOrNull { it.status == Download.State.DOWNLOADING } ?: queued.firstOrNull()
+            }
+            // SY -->
+            val item = mutableState.value.libraryData.favoritesById[id]
+            val chaptersDone = item?.downloadCount ?: 0
+            val upload = uploads[id]
+            // 上传页数条取「正在上传那一话」，与下载条取「正在下载那一章」严格对齐：
+            //   1) 正在传的那一话（正常情况）；
+            //   2) 本批次里还没轮到传的那一话（排队中 / 等这一话下载完）—— 让刚入队就有条可看；
+            //   3) 失败的那一话（上传已停，但要能把失败的进度显示出来）。
+            // 顺序依赖 `UploadState.chapters` 的插入顺序，也就是本批次的章节顺序。
+            val uploadChapter = upload?.chapters?.values?.let { chapters ->
+                chapters.firstOrNull { it.status == UploadStatus.UPLOADING }
+                    ?: chapters.firstOrNull {
+                        it.status == UploadStatus.QUEUED || it.status == UploadStatus.WAITING_CONFIRM
+                    }
+                    ?: chapters.firstOrNull { it.status == UploadStatus.ERROR }
+            }
+            // SY <--
+            LibraryMangaProgress(
+                downloading = active != null,
+                // `downloadedImages` 是 pages 里状态为 Ready 的页数，正好是「已下载页数」
+                pagesDone = active?.downloadedImages ?: 0,
+                // 页表要等 getPageList 回来才有，取不到就是 0（这时进度条显示 0%）
+                pagesTotal = active?.pages?.size ?: 0,
+                // SY -->
+                // 上传页数条也是「页数」口径，但看的是**当前这一话**（不是整批合计）
+                uploadPagesDone = uploadChapter?.pagesUploaded ?: 0,
+                uploadPagesTotal = uploadChapter?.pagesTotal ?: 0,
+                // 章节口径：整批已传几话 / 需传几话（`UploadState.uploaded` / `total`）
+                uploadChaptersDone = upload?.uploaded ?: 0,
+                uploadChaptersTotal = upload?.total ?: 0,
+                uploadStatus = upload?.status,
+                // SY <--
+                // SY -->
+                chaptersDone = chaptersDone,
+                chaptersPending = pendingByManga[id] ?: 0,
+                // SY <--
+            )
+        }
     }
 
     private fun downloadNextChapters(amount: Int?) {
@@ -831,6 +1147,57 @@ class LibraryScreenModel(
                 // SY <--
 
                 val chapters = getBookmarkedChaptersByMangaId.await(manga.id)
+                    .fastFilterNot { chapter ->
+                        downloadManager.getQueuedDownloadOrNull(chapter.id) != null ||
+                            downloadManager.isChapterDownloaded(
+                                chapter.name,
+                                chapter.scanlator,
+                                chapter.url,
+                                // SY -->
+                                manga.ogTitle,
+                                // SY <--
+                                manga.source,
+                            )
+                    }
+                downloadManager.downloadChapters(manga, chapters)
+            }
+        }
+    }
+
+    /**
+     * 排队下载所选漫画的全部章节（未下载的），供「所有章节」菜单项使用。
+     */
+    private fun downloadAllChapters() {
+        val mangas = state.value.selectedManga
+        screenModelScope.launchNonCancellable {
+            mangas.forEach { manga ->
+                // SY -->
+                if (manga.source == MERGED_SOURCE_ID) {
+                    val mergedMangas = getMergedMangaById.await(manga.id)
+                        .associateBy { it.id }
+                    getMergedChaptersByMangaId.await(manga.id, applyScanlatorFilter = true)
+                        .groupBy { it.mangaId }
+                        .forEach ab@{ (mangaId, chapters) ->
+                            val mergedManga = mergedMangas[mangaId] ?: return@ab
+                            val downloadChapters = chapters.fastFilterNot { chapter ->
+                                downloadManager.queueState.value.fastAny { chapter.id == it.chapter.id } ||
+                                    downloadManager.isChapterDownloaded(
+                                        chapter.name,
+                                        chapter.scanlator,
+                                        chapter.url,
+                                        mergedManga.ogTitle,
+                                        mergedManga.source,
+                                    )
+                            }
+
+                            downloadManager.downloadChapters(mergedManga, downloadChapters)
+                        }
+
+                    return@forEach
+                }
+                // SY <--
+
+                val chapters = getChaptersByMangaId.await(manga.id, applyScanlatorFilter = true)
                     .fastFilterNot { chapter ->
                         downloadManager.getQueuedDownloadOrNull(chapter.id) != null ||
                             downloadManager.isChapterDownloaded(
@@ -948,27 +1315,57 @@ class LibraryScreenModel(
             }
 
             if (deleteChapters) {
-                mangas.forEach { manga ->
-                    val source = sourceManager.get(manga.source) as? HttpSource
-                    if (source != null) {
-                        if (source is MergedSource) {
-                            val mergedMangas = getMergedMangaById.await(manga.id)
-                            val sources = mergedMangas.distinctBy {
-                                it.source
-                            }.map { sourceManager.getOrStub(it.source) }
-                            mergedMangas.forEach merge@{ mergedManga ->
-                                val mergedSource =
-                                    sources.firstOrNull { mergedManga.source == it.id } as? HttpSource ?: return@merge
-                                downloadManager.deleteManga(mergedManga, mergedSource)
-                            }
-                        } else {
-                            downloadManager.deleteManga(manga, source)
-                        }
+                deleteDownloadedChapters(mangas)
+            }
+        }
+    }
+
+    // SY -->
+    /**
+     * 「下载」分类里的删除：**只清本地下载**，并把这本漫画移出「下载」分类，其余一概不动。
+     *
+     * 与 [removeMangas] 的区别有两点，都是需求指定的：
+     *
+     * - **不碰书架归属**（`favorite` 保持不动）。漫画仍然留在它原有的其他分类里，
+     *   包括隐式的「默认」，只是不再出现在「下载」页；也就是这个删除**只作用于「下载」页**。
+     * - **不问那两个勾选项**（从书架删除 / 删除已下载章节）。下载分类本身就是「我在管下载」
+     *   的语境，再问一遍是多余的，二次确认一次就够。
+     *
+     * 移出分类这里**显式做一次**：`DownloadManager.deleteManga` 内部其实已经会调
+     * `DownloadCategory.removeManga`，但那是跟着「本地下载目录」走的 ——
+     * 万一分类里留了一本没有下载的漫画（下载失败、目录被手动删过之类），
+     * 不显式清一次它就永远卡在「下载」里出不去：用户在界面上手动改分类是**去不掉**它的
+     * （见 `DownloadCategory.resolveUserSelection`），删下载才是唯一出口。
+     */
+    fun removeDownloadedMangas(mangas: List<Manga>) {
+        screenModelScope.launchNonCancellable {
+            deleteDownloadedChapters(mangas)
+            mangas.forEach { downloadCategory.removeManga(it.id) }
+        }
+    }
+
+    /** 删掉这些漫画的本地下载。合并图源要连同它下面的各个子图源一起删。 */
+    private suspend fun deleteDownloadedChapters(mangas: List<Manga>) {
+        mangas.forEach { manga ->
+            val source = sourceManager.get(manga.source) as? HttpSource
+            if (source != null) {
+                if (source is MergedSource) {
+                    val mergedMangas = getMergedMangaById.await(manga.id)
+                    val sources = mergedMangas.distinctBy {
+                        it.source
+                    }.map { sourceManager.getOrStub(it.source) }
+                    mergedMangas.forEach merge@{ mergedManga ->
+                        val mergedSource =
+                            sources.firstOrNull { mergedManga.source == it.id } as? HttpSource ?: return@merge
+                        downloadManager.deleteManga(mergedManga, mergedSource)
                     }
+                } else {
+                    downloadManager.deleteManga(manga, source)
                 }
             }
         }
     }
+    // SY <--
 
     /**
      * Bulk update categories of manga using old and new common categories.
@@ -986,7 +1383,10 @@ class LibraryScreenModel(
                     .plus(addCategories)
                     .toList()
 
-                setMangaCategories.await(manga.id, categoryIds)
+                // 「下载」是模块自己的成员关系：用户在这里把它勾掉也踢不出去
+                // （唯一出口是删掉本地下载），只勾它则补上「默认」。
+                // 见 DownloadCategory.resolveUserSelection。
+                setMangaCategories.await(manga.id, downloadCategory.resolveUserSelection(manga.id, categoryIds))
             }
         }
     }
@@ -1000,9 +1400,8 @@ class LibraryScreenModel(
             .asState(screenModelScope)
     }
 
-    fun getRandomLibraryItemForCurrentCategory(): LibraryItem? {
-        val state = state.value
-        return state.getItemsForCategoryId(state.activeCategory?.id).randomOrNull()
+    fun getRandomLibraryItem(): LibraryItem? {
+        return state.value.libraryData.favorites.randomOrNull()
     }
 
     fun showSettingsDialog() {
@@ -1303,7 +1702,13 @@ class LibraryScreenModel(
     }
 
     fun openDeleteMangaDialog() {
-        mutableState.update { it.copy(dialog = Dialog.DeleteManga(state.value.selectedManga)) }
+        // SY -->
+        // 「下载」分类里的删除是另一回事（只清下载、移出该分类，不动书架归属），
+        // 所以在这里就把模式定下来 —— 在弹出那一刻决定，而不是等用户点确认时再去读
+        // 当前分类（那时状态可能已经变了）。
+        val downloadsOnly = state.value.activeCategory?.isDownloadCategory == true
+        // SY <--
+        mutableState.update { it.copy(dialog = Dialog.DeleteManga(state.value.selectedManga, downloadsOnly)) }
     }
 
     fun closeDialog() {
@@ -1317,7 +1722,13 @@ class LibraryScreenModel(
             val initialSelection: List<CheckboxState<Category>>,
         ) : Dialog
 
-        data class DeleteManga(val manga: List<Manga>) : Dialog
+        // SY -->
+        /**
+         * @param downloadsOnly 来自「下载」分类：只清本地下载并移出该分类，不问勾选项、
+         *   也不动书架归属（见 [removeDownloadedMangas]）。其余分类里是常规的 [removeMangas] 流程。
+         */
+        data class DeleteManga(val manga: List<Manga>, val downloadsOnly: Boolean = false) : Dialog
+        // SY <--
 
         // SY -->
         data object SyncFavoritesWarning : Dialog
@@ -1496,6 +1907,15 @@ class LibraryScreenModel(
         val showMangaContinueButton: Boolean = false,
         val dialog: Dialog? = null,
         val libraryData: LibraryData = LibraryData(),
+        // SY -->
+        /** 「下载」分类下进度条的数据源，键是 manga id（见 [buildLibraryProgress]）。 */
+        val libraryProgress: Map<Long, LibraryMangaProgress> = emptyMap(),
+        /**
+         * 「下载」分类多选时「上传」按钮能不能点（网络图源已填好服务器信息）。
+         * 见 [UploadManager.isUploadAvailable]。
+         */
+        val isUploadAvailable: Boolean = false,
+        // SY <--
         private val activeCategoryIndex: Int = 0,
         private val groupedFavorites: Map<Category, List</* LibraryItem */ Long>> = emptyMap(),
         // SY -->
@@ -1554,6 +1974,31 @@ class LibraryScreenModel(
             return groupedFavorites[category].orEmpty().mapNotNull { libraryData.favoritesById[it] }
         }
 
+        // SY -->
+        /**
+         * 「下载」分类当前列出的全部漫画（受搜索 / 过滤影响，与界面所见一致）。
+         *
+         * 右下角悬浮「继续」按钮据此决定给哪些漫画续下 —— 用户过滤出 3 本，
+         * 按钮就只给这 3 本续，行为和眼睛看到的保持一致。
+         */
+        val downloadCategoryItems: List<LibraryItem>
+            get() = displayedCategories
+                .firstOrNull { it.isDownloadCategory }
+                ?.let { getItemsForCategory(it) }
+                .orEmpty()
+        // SY <--
+
+        // SY -->
+        /**
+         * 「下载」分类下某个项目的进度条数据。
+         *
+         * 查不到就返回 [LibraryMangaProgress.EMPTY]（= 没有任何下载/上传活动），
+         * 界面据此**一条进度条都不画**。有任务的项才由 [buildLibraryProgress] 填出数据。
+         */
+        fun progressFor(item: LibraryItem): LibraryMangaProgress =
+            libraryProgress[item.id] ?: LibraryMangaProgress.EMPTY
+        // SY <--
+
         fun getItemCountForCategory(category: Category): Int? {
             return if (showMangaCount || !searchQuery.isNullOrEmpty()) groupedFavorites[category]?.size else null
         }
@@ -1577,4 +2022,23 @@ class LibraryScreenModel(
             return LibraryToolbarTitle(title, count)
         }
     }
+
+    // SY -->
+    private companion object {
+        /**
+         * 书架进度条的采样间隔。
+         *
+         * 400ms 足够让进度条看起来是连续的，又不会让大型书架频繁重组。
+         * 只在书架页可见时跑（作用域是 `screenModelScope`）。
+         */
+        private val LIBRARY_PROGRESS_TICK = 400.milliseconds
+
+        /**
+         * 「上传」按钮可用性的采样间隔。
+         *
+         * 这个值只在用户改图源设置时才会变，不需要进度条那样的密度，1 秒足够及时。
+         */
+        private val UPLOAD_AVAILABILITY_TICK = 1.seconds
+    }
+    // SY <--
 }

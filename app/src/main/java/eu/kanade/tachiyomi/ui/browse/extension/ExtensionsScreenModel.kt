@@ -8,6 +8,7 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.extension.interactor.GetExtensionsByType
 import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.presentation.browse.components.NsfwFilter
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
@@ -35,7 +36,7 @@ import uy.kohesive.injekt.api.get
 import kotlin.time.Duration.Companion.seconds
 
 class ExtensionsScreenModel(
-    preferences: SourcePreferences = Injekt.get(),
+    private val preferences: SourcePreferences = Injekt.get(),
     basePreferences: BasePreferences = Injekt.get(),
     private val extensionManager: ExtensionManager = Injekt.get(),
     private val getExtensions: GetExtensionsByType = Injekt.get(),
@@ -57,23 +58,30 @@ class ExtensionsScreenModel(
                     .distinctUntilChanged()
                     .debounce(0.25.seconds)
                     .map { searchQueryPredicate(it ?: "") },
+                state.map { it.nsfwFilter }.distinctUntilChanged(),
                 currentDownloads,
                 getExtensions.subscribe(),
-            ) { predicate, downloads, (_updates, _installed, _available, _untrusted) ->
+            ) { predicate, nsfwFilter, downloads, (_updates, _installed, _available, _untrusted) ->
+                val nsfwPredicate: (Extension) -> Boolean = when (nsfwFilter) {
+                    NsfwFilter.ShowAll -> { _: Extension -> true }
+                    NsfwFilter.OnlyNsfw -> { ext: Extension -> ext.isNsfw }
+                    NsfwFilter.HideNsfw -> { ext: Extension -> !ext.isNsfw }
+                }
+                val filter: (Extension) -> Boolean = { ext -> predicate(ext) && nsfwPredicate(ext) }
                 buildMap {
-                    val updates = _updates.filter(predicate).map(extensionMapper(downloads))
+                    val updates = _updates.filter(filter).map(extensionMapper(downloads))
                     if (updates.isNotEmpty()) {
                         put(ExtensionUiModel.Header.Resource(MR.strings.ext_updates_pending), updates)
                     }
 
-                    val installed = _installed.filter(predicate).map(extensionMapper(downloads))
-                    val untrusted = _untrusted.filter(predicate).map(extensionMapper(downloads))
+                    val installed = _installed.filter(filter).map(extensionMapper(downloads))
+                    val untrusted = _untrusted.filter(filter).map(extensionMapper(downloads))
                     if (installed.isNotEmpty() || untrusted.isNotEmpty()) {
                         put(ExtensionUiModel.Header.Resource(MR.strings.ext_installed), installed + untrusted)
                     }
 
                     val languagesWithExtensions = _available
-                        .filter(predicate)
+                        .filter(filter)
                         .groupBy { it.lang }
                         .toSortedMap(LocaleHelper.comparator)
                         .map { (lang, exts) ->
@@ -99,6 +107,14 @@ class ExtensionsScreenModel(
 
         preferences.extensionUpdatesCount.changes()
             .onEach { mutableState.update { state -> state.copy(updates = it) } }
+            .launchIn(screenModelScope)
+
+        preferences.enabledLanguages.changes()
+            .onEach { mutableState.update { state -> state.copy(enabledLanguages = it) } }
+            .launchIn(screenModelScope)
+
+        preferences.languageOrder.changes()
+            .onEach { mutableState.update { state -> state.copy(languageOrder = it) } }
             .launchIn(screenModelScope)
 
         basePreferences.extensionInstaller.changes()
@@ -141,6 +157,33 @@ class ExtensionsScreenModel(
             it.copy(searchQuery = query)
         }
     }
+
+    // SY -->
+    fun toggleNsfwFilter() {
+        mutableState.update { state ->
+            val next = when (state.nsfwFilter) {
+                NsfwFilter.ShowAll -> NsfwFilter.OnlyNsfw
+                NsfwFilter.OnlyNsfw -> NsfwFilter.HideNsfw
+                NsfwFilter.HideNsfw -> NsfwFilter.ShowAll
+            }
+            state.copy(nsfwFilter = next)
+        }
+    }
+
+    fun moveLanguage(lang: String, targetIndex: Int) {
+        mutableState.update { state ->
+            val current = state.languageOrder.ifEmpty {
+                LocaleHelper.sortLanguages(state.enabledLanguages, emptyList())
+            }
+            val updated = current.toMutableList().apply {
+                remove(lang)
+                add(targetIndex.coerceIn(0, size), lang)
+            }
+            preferences.languageOrder.set(updated)
+            state.copy(languageOrder = updated)
+        }
+    }
+    // SY <--
 
     fun updateAllExtensions() {
         screenModelScope.launchIO {
@@ -215,6 +258,9 @@ class ExtensionsScreenModel(
         val updates: Int = 0,
         val installer: BasePreferences.ExtensionInstaller? = null,
         val searchQuery: String? = null,
+        val enabledLanguages: Set<String> = emptySet(),
+        val languageOrder: List<String> = emptyList(),
+        val nsfwFilter: NsfwFilter = NsfwFilter.ShowAll,
     ) {
         val isEmpty = items.isEmpty()
     }

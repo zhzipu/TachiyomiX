@@ -5,13 +5,20 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.graphics.alpha
 import androidx.core.graphics.blue
 import androidx.core.graphics.green
 import androidx.core.graphics.red
+import eu.kanade.tachiyomi.modelpack.ModelPackManager
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences.Companion.ColorFilterMode
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.CheckboxItem
@@ -122,6 +129,32 @@ internal fun ColumnScope.ColorFilterPage(screenModel: ReaderSettingsScreenModel)
         label = stringResource(MR.strings.pref_inverted_colors),
         pref = screenModel.preferences.invertedColors,
     )
+
+    // region 图像增强（AI 放大）
+    val context = LocalContext.current
+    val modelsAvailable by remember { ModelPackManager.models }.collectAsState()
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            ModelPackManager.installedModels(context.applicationContext)
+        }
+    }
+    val hasModels = modelsAvailable.isNotEmpty()
+    if (hasModels) {
+        val realCuganEnabled by screenModel.preferences.realCuganEnabled().collectAsState()
+
+        CheckboxItem(
+            label = stringResource(MR.strings.reader_image_enhancement),
+            checked = realCuganEnabled,
+            onClick = {
+                screenModel.preferences.realCuganEnabled().set(!realCuganEnabled)
+            },
+        )
+        // 具体设置项与底栏「增强设置」对话框共用同一份实现，不在这里重复
+        if (realCuganEnabled) {
+            EnhancementSettingsPage(screenModel)
+        }
+    }
+    // endregion
 }
 
 private fun getColorValue(currentColor: Int, color: Int, mask: Long, bitShift: Int): Int {

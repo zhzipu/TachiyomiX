@@ -63,6 +63,11 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         pref = screenModel.preferences.showPageNumber,
     )
 
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_show_system_time),
+        pref = screenModel.preferences.showSystemTime,
+    )
+
     val verticalNavigatorModes by screenModel.preferences.verticalNavigator.collectAsState()
 
     SettingsChipRow(MR.strings.pref_vertical_navigator) {
@@ -103,6 +108,11 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
     CheckboxItem(
         label = stringResource(MR.strings.pref_fullscreen),
         pref = screenModel.preferences.fullscreen,
+    )
+
+    CheckboxItem(
+        label = stringResource(SYMR.strings.pref_disable_double_tap_zoom),
+        pref = screenModel.preferences.disableDoubleTapZoom,
     )
 
     val isFullscreen by screenModel.preferences.fullscreen.collectAsState()

@@ -16,6 +16,7 @@ abstract class ViewerNavigation {
         data object NEXT : NavigationRegion(MR.strings.nav_zone_next, Color.argb(0xCC, 0x84, 0xE2, 0x96))
         data object LEFT : NavigationRegion(MR.strings.nav_zone_left, Color.argb(0xCC, 0x7D, 0x11, 0x28))
         data object RIGHT : NavigationRegion(MR.strings.nav_zone_right, Color.argb(0xCC, 0xA6, 0xCF, 0xD5))
+        data object NONE : NavigationRegion(MR.strings.none, Color.argb(0xCC, 0x9E, 0x9E, 0x9E))
     }
 
     data class Region(
@@ -37,7 +38,7 @@ abstract class ViewerNavigation {
     protected abstract var regionList: List<Region>
 
     /** Returns regions with applied inversion. */
-    fun getRegions(): List<Region> {
+    open fun getRegions(): List<Region> {
         return regionList.map { it.invert(invertMode) }
     }
 

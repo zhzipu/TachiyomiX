@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- SY: 伪装应用图标底色 -->
+    <color name="ic_disguise_calc_background">#FF2F3542</color>
+    <color name="ic_disguise_note_background">#FFF2C94C</color>
+    <color name="ic_disguise_study_background">#FF2D6CDF</color>
+</resources>

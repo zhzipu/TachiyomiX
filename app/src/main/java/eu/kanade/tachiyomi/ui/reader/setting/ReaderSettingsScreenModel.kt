@@ -27,4 +27,10 @@ class ReaderSettingsScreenModel(
         .map { it.manga }
         .distinctUntilChanged()
         .stateIn(ioCoroutineScope, SharingStarted.Lazily, null)
+
+    /** 当前章节（含页面列表），供「整章加入增强队列」等操作使用。 */
+    val currentChapterFlow = readerState
+        .map { it.currentChapter }
+        .distinctUntilChanged()
+        .stateIn(ioCoroutineScope, SharingStarted.Lazily, null)
 }

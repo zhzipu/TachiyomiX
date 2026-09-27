@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.core.net.toUri
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -48,6 +49,7 @@ class BackupRestoreJob(private val context: Context, workerParams: WorkerParamet
                 notifier.showRestoreError(context.stringResource(MR.strings.restoring_backup_canceled))
                 Result.success()
             } else {
+                Log.e("WebDavSync", "BackupRestoreJob failed: ${e.message}", e)
                 logcat(LogPriority.ERROR, e)
                 notifier.showRestoreError(e.message)
                 Result.failure()

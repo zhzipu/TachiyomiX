@@ -15,7 +15,6 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.storage.CbzCrypto
 import eu.kanade.tachiyomi.util.storage.DiskUtil
-import eu.kanade.tachiyomi.util.storage.DiskUtil.NOMEDIA_FILE
 import eu.kanade.tachiyomi.util.storage.saveTo
 import exh.source.isEhBasedSource
 import exh.util.DataSaver
@@ -44,6 +43,7 @@ import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import mihon.core.common.archive.ZipWriter
 import nl.adaptivity.xmlutil.serialization.XML
@@ -53,6 +53,7 @@ import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNow
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.ImageUtil
+import eu.kanade.tachiyomi.util.system.toast
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.core.metadata.comicinfo.COMIC_INFO_FILE
 import tachiyomi.core.metadata.comicinfo.ComicInfo
@@ -62,6 +63,7 @@ import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.track.interactor.GetTracks
+import tachiyomi.i18n.sy.SYMR
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -428,7 +430,7 @@ class Downloader(
 
             // Only rename the directory if it's downloaded
             if (downloadPreferences.saveChaptersAsCBZ.get()) {
-                archiveChapter(mangaDir, chapterDirname, tmpDir)
+                archiveChapter(mangaDir, chapterDirname, tmpDir, download.pages.orEmpty())
             } else {
                 tmpDir.renameTo(chapterDirname)
             }
@@ -437,6 +439,21 @@ class Downloader(
             DiskUtil.createNoMediaFile(tmpDir, context)
 
             download.status = Download.State.DOWNLOADED
+
+            // SY -->
+            // 完成提示：用户要求「下载完成时在底部提示 XXX 完成下载」，带上漫画名与章节名。
+            // Toast 必须在主线程 show（后台线程建 Toast 会走没有 Looper 的线程），
+            // 这里本来就在 IO 协程里，所以切一下。
+            withContext(Dispatchers.Main) {
+                context.toast(
+                    context.stringResource(
+                        SYMR.strings.download_toast_completed,
+                        download.manga.title,
+                        download.chapter.name,
+                    ),
+                )
+            }
+            // SY <--
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
             // If the page list threw, it will resume here
@@ -463,9 +480,17 @@ class Downloader(
         val filename = "%0${digitCount}d".format(Locale.ENGLISH, page.number)
 
         // Try to find the image file
-        val imageFile = tmpDir.listFiles()?.firstOrNull {
-            isDownloadedPageImage(it.name ?: return@firstOrNull false, filename)
-        }
+        // SY -->
+        // 按**页码**匹配（见 pageNumberOf），而不是按 `001.` 前缀：存储位置是 SAF 目录时，
+        // 提供方会在重名时把文件自动改成 `001 (1).jpg`，那种名字按前缀永远匹配不上，
+        // 于是每次续传都当「这一页没下过」重下一遍，副本越滚越多、完成判定也跟着失败。
+        val existingFiles = tmpDir.listFiles().orEmpty()
+            .filter { it.name?.let(::pageNumberOf) == page.number }
+        // 多余副本就地删掉：留着既会让「这一话下完了没有」的判定一直不通过，
+        // 也会在阅读和打包 CBZ 时变成重复的页
+        existingFiles.drop(1).forEach { it.delete() }
+        val imageFile = existingFiles.firstOrNull()
+        // SY <--
 
         try {
             // If the image is already downloaded, do nothing. Otherwise download from network
@@ -522,6 +547,12 @@ class Downloader(
                         stream = file.openOutputStream(it.code == 206),
                     )
                     val extension = getImageExtension(it, file)
+                    // SY -->
+                    // 先删掉同名的旧文件再改名。SAF 存储下「改名到一个已存在的名字」会被提供方
+                    // 悄悄改成 `001 (1).jpg`，那种名字后续既认不出是第几页（见 pageNumberOf），
+                    // 又会被算进「目录里有几个文件」，把整话的完成判定拖挂。
+                    tmpDir.findFile("$filename.$extension")?.delete()
+                    // SY <--
                     file.renameTo("$filename.$extension")
                 }
             } catch (e: HttpException) {
@@ -564,6 +595,9 @@ class Downloader(
             }
         }
         val extension = ImageUtil.findImageType(cacheFile.inputStream()) ?: return tmpFile
+        // SY --> 同 downloadImage：先删同名旧文件，避免提供方把这次改名变成 `001 (1).jpg`
+        tmpDir.findFile("$filename.${extension.extension}")?.delete()
+        // SY <--
         tmpFile.renameTo("$filename.${extension.extension}")
         cacheFile.delete()
         return tmpFile
@@ -586,11 +620,20 @@ class Downloader(
 
         try {
             val filenamePrefix = "%03d".format(Locale.ENGLISH, page.number)
-            val imageFile = tmpDir.listFiles()?.firstOrNull { it.name.orEmpty().startsWith(filenamePrefix) }
+            // SY -->
+            val files = tmpDir.listFiles().orEmpty()
+            // 一个都列不出来时直接跳过：这条路径拿不到文件说明是存储层的问题，
+            // 不在这里刷错误日志（那种情况由 isDownloadSuccessful 统一处理）
+            if (files.isEmpty()) return
+
+            // 同样按**页码**匹配（见 pageNumberOf）：按 `001` 前缀能匹配到一堆东西
+            //（`001 (1).jpg` 副本、`001__002.jpg` 分割片段），挑错文件就白分割了
+            val imageFile = files.firstOrNull { it.name?.let(::pageNumberOf) == page.number }
                 ?: error(context.stringResource(MR.strings.download_notifier_split_page_not_found, page.number))
 
             // If the original page was previously split, then skip
-            if (imageFile.name.orEmpty().startsWith("${filenamePrefix}__")) return
+            if (imageFile.name.orEmpty().contains("__")) return
+            // SY <--
 
             ImageUtil.splitTallImage(
                 tmpDir,
@@ -621,52 +664,134 @@ class Downloader(
         }
 
         // Ensure that the chapter folder has all the pages
-        val downloadedImagesCount = tmpDir.listFiles().orEmpty().count {
-            val fileName = it.name.orEmpty()
-            when {
-                fileName in listOf(COMIC_INFO_FILE, NOMEDIA_FILE) -> false
-                fileName.endsWith(".tmp") -> false
-                // Only count the first split page and not the others
-                fileName.contains("__") && !fileName.endsWith("__001.jpg") -> false
-                else -> true
+        // SY -->
+        // **不再靠列目录验证文件是否齐全**。原因（本机实测过）：`UniFile.listFiles()` 走的是
+        // 它内部的 `DocumentsContractApi21.listFilesNamed`，那里把查询异常**整个吞掉**、
+        // 返回空数组；在这台机器的 SAF 目录上它就一直返回空。于是「目录里的文件数 == 页数」
+        // 这种判断会把一话已经下好的漫画判死 —— 进度条显示 23/23、状态却是失败；
+        // 而且一旦判失败，下次续传又会重下一遍并留下 `001 (1).jpg` 副本，越修越坏。
+        //
+        // 页状态是可信的：每一页的 Ready 都在文件确实写成功之后才置上（见 getOrDownloadImage）。
+        // 列目录的结果只当线索写进日志，不再参与判定。
+        val listedFiles = tmpDir.listFiles().orEmpty().mapNotNull { it.name }
+        if (listedFiles.isEmpty()) {
+            logcat(LogPriority.WARN) {
+                "download: '$tmpDir' lists nothing (SAF listing unreliable on this device), " +
+                    "trusting page states (ready=${download.downloadedImages}/$downloadPageCount)"
+            }
+        } else {
+            logcat(LogPriority.INFO) {
+                "download: '${download.chapter.name}' listed=${listedFiles.size} files, " +
+                    "distinctPages=${listedFiles.mapNotNull { pageNumberOf(it) }.toSet().size}/$downloadPageCount"
             }
         }
-        return downloadedImagesCount == downloadPageCount
+        return true
+        // SY <--
     }
 
+    // SY -->
     /**
-     * Checks if the file name matches a downloaded page image.
+     * 从文件名里取出页码；不是页面图片（`.tmp` / `.nomedia` / `comic_info.json` …）时返回 null。
      *
-     * @param fileName Name of the file to check
-     * @param pagePrefix Expected page prefix (e.g., "001")
+     * 之所以不按「`001.` 前缀」匹配，是因为磁盘上的名字可能被外部改过：
+     *
+     * - 存储位置是 SAF 目录时，**重名**的文件会被提供方自动加上 ` (1)` 后缀
+     *   （`001 (1).jpg`）—— 按前缀匹配就再也认不出它是第 1 页；
+     * - 长图被分割后是 `001__001.jpg`、`001__002.jpg`…，同一页的多个片段都算第 1 页。
+     *
+     * 这两种都应当归到对应页码上，否则「这一页本地有没有」会判断错。
      */
-    private fun isDownloadedPageImage(fileName: String, pagePrefix: String): Boolean =
-        !fileName.endsWith(".tmp") && (
-            fileName.startsWith("$pagePrefix.") ||
-                fileName.startsWith("${pagePrefix}__001.")
-            )
+    private fun pageNumberOf(fileName: String): Int? {
+        if (fileName.endsWith(".tmp")) return null
+        val base = fileName.substringBefore(" (").substringBefore('.')
+        if (base.isEmpty()) return null
+        return base.substringBefore("__").toIntOrNull()
+    }
+    // SY <--
 
     /**
      * Archive the chapter pages as a CBZ.
+     *
+     * SY -->
+     * **不靠列目录打包**：`UniFile.listFiles()` 在部分设备的 SAF 目录上会静默返回空
+     * （见 [isDownloadSuccessful] 的注释）。照它枚举就会打出一个 0 条目的空包，
+     * 然后还把已经下好的图片删掉 —— 本机就是这么丢过一次数据。改成按**页**取文件：
+     * 每一页的文件在下载时就记在 [Page.uri] 上，顺序也正好是包内顺序；
+     * 长图被分割过的页原图会被删掉，这时用 [filesOfPage] 去找它的分割片段。
+     *
+     * @param pages 这一话的页，顺序即包内顺序
+     * @throws IllegalStateException 一个文件都没打进去 —— 宁可判失败、把临时目录留着，
+     *   也不要落一个空包（空包在阅读器里就是「一话零页」）
+     * SY <--
      */
     private fun archiveChapter(
         mangaDir: UniFile,
         dirname: String,
         tmpDir: UniFile,
+        pages: List<Page>,
     ) {
         // SY -->
         val encrypt = CbzCrypto.getPasswordProtectDlPref() && CbzCrypto.isPasswordSet()
         // SY <--
 
         val zip = mangaDir.createFile("$dirname.cbz$TMP_DIR_SUFFIX")!!
-        ZipWriter(context, zip, /* SY --> */ encrypt /* SY <-- */).use { writer ->
-            tmpDir.listFiles()?.forEach { file ->
-                writer.write(file)
+        var packed = 0
+        try {
+            ZipWriter(context, zip, /* SY --> */ encrypt /* SY <-- */).use { writer ->
+                pages.forEach { page ->
+                    filesOfPage(page, tmpDir).forEach { file ->
+                        try {
+                            writer.write(file)
+                            packed++
+                        } catch (e: Exception) {
+                            logcat(LogPriority.WARN, e) { "archive: cannot pack '${file.name}'" }
+                        }
+                    }
+                }
             }
+        } catch (e: Exception) {
+            zip.delete()
+            throw e
         }
+
+        if (packed == 0) {
+            zip.delete()
+            error("archiveChapter: no page files found for '$dirname'")
+        }
+
         zip.renameTo("$dirname.cbz")
         tmpDir.delete()
     }
+
+    // SY -->
+    /**
+     * 一页在磁盘上的文件：正常情况下是原图；被长图分割过的话原图已经被删掉，
+     * 只剩 `${前缀}__001.jpg`、`${前缀}__002.jpg`…
+     *
+     * 这里用 [UniFile.findFile] 逐个探片段，而不是列目录：设备存储上 `findFile` 走的是
+     * 「按文件名拼 document id」的快路径（不查子项列表），在这台机器上它是**可靠**的 ——
+     * 也正是它让「建目录 / 建文件」一直正常。
+     */
+    private fun filesOfPage(page: Page, tmpDir: UniFile): List<UniFile> {
+        val uri = page.uri ?: return emptyList()
+        val fileName = uri.pathSegments.lastOrNull()?.substringAfterLast('/') ?: return emptyList()
+
+        UniFile.fromUri(context, uri)?.takeIf { it.exists() }?.let { return listOf(it) }
+
+        // 原图不在 → 应该是被分割删掉的，按 `前缀__序号.扩展名` 连续探
+        val prefix = fileName.substringBeforeLast('.', fileName)
+        val extension = fileName.substringAfterLast('.', "jpg")
+        val parts = mutableListOf<UniFile>()
+        var index = 1
+        while (true) {
+            val part = tmpDir.findFile("%s__%03d.%s".format(Locale.ENGLISH, prefix, index, extension))
+                ?: break
+            parts += part
+            index++
+        }
+        return parts
+    }
+    // SY <--
 
     /**
      * Creates a ComicInfo.xml file inside the given directory.

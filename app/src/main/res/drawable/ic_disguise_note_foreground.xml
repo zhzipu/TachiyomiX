@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 记事本 -->
+    <path
+        android:fillColor="#FF3B2E00"
+        android:pathData="M38,22 L70,22 Q78,22 78,30 L78,78 Q78,86 70,86 L38,86 Q30,86 30,78 L30,30 Q30,22 38,22 Z" />
+    <!-- 文字行 -->
+    <path
+        android:fillColor="#FFF2C94C"
+        android:pathData="M38,36 L70,36 L70,40 L38,40 Z M38,48 L70,48 L70,52 L38,52 Z M38,60 L58,60 L58,64 L38,64 Z" />
+</vector>

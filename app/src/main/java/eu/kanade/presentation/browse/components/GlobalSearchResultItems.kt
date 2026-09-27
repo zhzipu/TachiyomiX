@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.CheckBox
+import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material.icons.outlined.Error
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -37,6 +39,9 @@ fun GlobalSearchResultItem(
     onClick: () -> Unit,
     // SY -->
     onLongClick: (() -> Unit)? = null,
+    // 多选模式下按图源全选/全不选，显示在 → 左侧
+    onToggleSelectAll: (() -> Unit)? = null,
+    allSelected: Boolean = false,
     // SY <--
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
@@ -70,8 +75,26 @@ fun GlobalSearchResultItem(
                     Text(text = subtitle)
                 }
             }
-            IconButton(onClick = onClick) {
-                Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // SY -->
+                if (onToggleSelectAll != null) {
+                    IconButton(onClick = onToggleSelectAll) {
+                        Icon(
+                            imageVector = if (allSelected) {
+                                Icons.Outlined.CheckBox
+                            } else {
+                                Icons.Outlined.CheckBoxOutlineBlank
+                            },
+                            contentDescription = stringResource(
+                                if (allSelected) MR.strings.action_deselect_all else MR.strings.action_select_all,
+                            ),
+                        )
+                    }
+                }
+                // SY <--
+                IconButton(onClick = onClick) {
+                    Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
+                }
             }
         }
         content()

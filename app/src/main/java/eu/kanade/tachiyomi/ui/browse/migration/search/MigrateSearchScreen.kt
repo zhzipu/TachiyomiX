@@ -45,6 +45,11 @@ class MigrateSearchScreen(private val mangaId: Long) : Screen() {
                 }
             },
             onLongClickItem = { navigator.push(MangaScreen(it.id, true)) },
+            onSearchHistoryClick = { query ->
+                screenModel.updateSearchQuery(query)
+                screenModel.search()
+            },
+            onClearSearchHistory = screenModel::clearSearchHistory,
         )
 
         when (val dialog = state.dialog) {

@@ -36,11 +36,14 @@ import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.interactor.NetworkToLocalManga
+import tachiyomi.domain.source.interactor.ClearSearchHistory
 import tachiyomi.domain.source.interactor.CountFeedSavedSearchBySourceId
 import tachiyomi.domain.source.interactor.DeleteFeedSavedSearchById
 import tachiyomi.domain.source.interactor.GetFeedSavedSearchBySourceId
 import tachiyomi.domain.source.interactor.GetSavedSearchBySourceIdFeed
+import tachiyomi.domain.source.interactor.GetSearchHistory
 import tachiyomi.domain.source.interactor.InsertFeedSavedSearch
+import tachiyomi.domain.source.interactor.InsertSearchHistory
 import tachiyomi.domain.source.model.EXHSavedSearch
 import tachiyomi.domain.source.model.FeedSavedSearch
 import tachiyomi.domain.source.model.SavedSearch
@@ -65,6 +68,9 @@ open class SourceFeedScreenModel(
     private val insertFeedSavedSearch: InsertFeedSavedSearch = Injekt.get(),
     private val deleteFeedSavedSearchById: DeleteFeedSavedSearchById = Injekt.get(),
     private val getExhSavedSearch: GetExhSavedSearch = Injekt.get(),
+    private val getSearchHistory: GetSearchHistory = Injekt.get(),
+    private val insertSearchHistory: InsertSearchHistory = Injekt.get(),
+    private val clearSearchHistoryInteractor: ClearSearchHistory = Injekt.get(),
 ) : StateScreenModel<SourceFeedState>(SourceFeedState()) {
 
     val source = sourceManager.getOrStub(sourceId)
@@ -74,6 +80,8 @@ open class SourceFeedScreenModel(
     private val coroutineDispatcher = Executors.newFixedThreadPool(5).asCoroutineDispatcher()
 
     val startExpanded by uiPreferences.expandFilters.asState(screenModelScope)
+
+    private val searchHistoryScope = "source_$sourceId"
 
     init {
         setFilters(source.getFilterList())
@@ -94,6 +102,13 @@ open class SourceFeedScreenModel(
                 getFeed(items)
             }
             .launchIn(screenModelScope)
+
+        screenModelScope.launch {
+            getSearchHistory.subscribe(searchHistoryScope)
+                .collectLatest { queries ->
+                    mutableState.update { it.copy(searchHistory = queries) }
+                }
+        }
     }
 
     fun setFilters(filters: FilterList) {
@@ -273,8 +288,23 @@ open class SourceFeedScreenModel(
         }
     }
 
+    fun setSearchQuery(query: String?) {
+        mutableState.update { it.copy(searchQuery = query) }
+    }
+
     fun search(query: String?) {
         mutableState.update { it.copy(searchQuery = query) }
+        if (!query.isNullOrBlank()) {
+            screenModelScope.launchIO {
+                insertSearchHistory.await(searchHistoryScope, query)
+            }
+        }
+    }
+
+    fun clearSearchHistory() {
+        screenModelScope.launchIO {
+            clearSearchHistoryInteractor.await(searchHistoryScope)
+        }
     }
 
     fun openFilterSheet() {
@@ -312,6 +342,7 @@ data class SourceFeedState(
     val filters: FilterList = FilterList(),
     val savedSearches: List<EXHSavedSearch> = emptyList(),
     val dialog: SourceFeedScreenModel.Dialog? = null,
+    val searchHistory: List<String> = emptyList(),
 ) {
     val isLoading
         get() = items.isEmpty()

@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.browse.migration.search
 
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material3.Icon
@@ -72,6 +74,9 @@ data class MigrateSourceSearchScreen(
                     onClickCloseSearch = navigator::pop,
                     onSearch = screenModel::search,
                     scrollBehavior = scrollBehavior,
+                    searchHistory = state.searchHistory,
+                    onSearchHistoryClick = screenModel::search,
+                    onClearSearchHistory = screenModel::clearSearchHistory,
                 )
             },
             floatingActionButton = {
@@ -109,6 +114,10 @@ data class MigrateSourceSearchScreen(
                 displayMode = screenModel.displayMode,
                 snackbarHostState = snackbarHostState,
                 contentPadding = paddingValues,
+                // SY -->
+                listState = rememberLazyListState(),
+                gridState = rememberLazyGridState(),
+                // SY <--
                 onWebViewClick = {
                     val source = screenModel.source as? HttpSource ?: return@BrowseSourceContent
                     navigator.push(

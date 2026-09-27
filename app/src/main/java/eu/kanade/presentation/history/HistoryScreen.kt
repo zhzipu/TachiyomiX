@@ -1,13 +1,20 @@
 package eu.kanade.presentation.history
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewParameter
@@ -40,10 +47,18 @@ fun HistoryScreen(
     onClickFavorite: (mangaId: Long) -> Unit,
     onDialogChange: (HistoryScreenModel.Dialog?) -> Unit,
 ) {
+    // 点击顶部"历史"标题时递增，通知列表回到顶部
+    var scrollToTopNonce by remember { mutableIntStateOf(0) }
+
     Scaffold(
         topBar = { scrollBehavior ->
             SearchToolbar(
-                titleContent = { AppBarTitle(stringResource(MR.strings.history)) },
+                titleContent = {
+                    AppBarTitle(
+                        title = stringResource(MR.strings.history),
+                        modifier = Modifier.clickable { scrollToTopNonce++ },
+                    )
+                },
                 searchQuery = state.searchQuery,
                 onChangeSearchQuery = onSearchQueryChange,
                 actions = {
@@ -81,6 +96,7 @@ fun HistoryScreen(
                 HistoryScreenContent(
                     history = it,
                     contentPadding = contentPadding,
+                    scrollToTopNonce = scrollToTopNonce,
                     onClickCover = { history -> onClickCover(history.mangaId) },
                     onClickResume = { history -> onClickResume(history.mangaId, history.chapterId) },
                     onClickDelete = { item -> onDialogChange(HistoryScreenModel.Dialog.Delete(item)) },
@@ -95,12 +111,21 @@ fun HistoryScreen(
 private fun HistoryScreenContent(
     history: List<HistoryUiModel>,
     contentPadding: PaddingValues,
+    scrollToTopNonce: Int,
     onClickCover: (HistoryWithRelations) -> Unit,
     onClickResume: (HistoryWithRelations) -> Unit,
     onClickDelete: (HistoryWithRelations) -> Unit,
     onClickFavorite: (HistoryWithRelations) -> Unit,
 ) {
+    // 点击顶部"历史"标题时，列表带动画回到顶部
+    val listState = rememberLazyListState()
+    LaunchedEffect(scrollToTopNonce) {
+        if (scrollToTopNonce > 0) {
+            listState.animateScrollToItem(0)
+        }
+    }
     FastScrollLazyColumn(
+        state = listState,
         contentPadding = contentPadding,
     ) {
         items(

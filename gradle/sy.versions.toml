@@ -20,3 +20,5 @@ koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
 
 zxing-android-embedded = "com.journeyapps:zxing-android-embedded:4.3.0"
+
+bcprov = "org.bouncycastle:bcprov-jdk18on:1.78.1"

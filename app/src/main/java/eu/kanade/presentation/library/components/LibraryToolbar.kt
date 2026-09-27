@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.SearchToolbar
+import eu.kanade.tachiyomi.R
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
 import tachiyomi.presentation.core.components.Pill
@@ -41,6 +42,11 @@ fun LibraryToolbar(
     // SY -->
     onClickSyncExh: (() -> Unit)?,
     isSyncEnabled: Boolean,
+    /**
+     * 左上角的自定义内容。「下载」分类里放「继续 / 暂停」两个图标按钮，
+     * 其余分类传 null（不占位置）。多选态下不显示 —— 那时左上角是「退出多选」。
+     */
+    navigationContent: @Composable (() -> Unit)? = null,
     // SY <--
     searchQuery: String?,
     onSearchQueryChange: (String?) -> Unit,
@@ -65,6 +71,7 @@ fun LibraryToolbar(
         // SY -->
         onClickSyncExh = onClickSyncExh,
         isSyncEnabled = isSyncEnabled,
+        navigationContent = navigationContent,
         // SY <--
         scrollBehavior = scrollBehavior,
     )
@@ -84,6 +91,7 @@ private fun LibraryRegularToolbar(
     // SY -->
     onClickSyncExh: (() -> Unit)?,
     isSyncEnabled: Boolean,
+    navigationContent: @Composable (() -> Unit)?,
     // SY <--
     scrollBehavior: TopAppBarScrollBehavior?,
 ) {
@@ -108,10 +116,18 @@ private fun LibraryRegularToolbar(
         },
         searchQuery = searchQuery,
         onChangeSearchQuery = onSearchQueryChange,
+        // SY -->
+        navigationContent = navigationContent,
+        // SY <--
         actions = {
             val filterTint = if (hasFilters) MaterialTheme.colorScheme.active else LocalContentColor.current
             AppBarActions(
                 listOf(
+                    AppBar.PainterAction(
+                        title = stringResource(MR.strings.action_open_random_manga),
+                        iconRes = R.drawable.ic_random,
+                        onClick = onClickOpenRandomManga,
+                    ),
                     AppBar.Action(
                         title = stringResource(MR.strings.action_filter),
                         icon = Icons.Outlined.FilterList,
@@ -125,10 +141,6 @@ private fun LibraryRegularToolbar(
                     AppBar.OverflowAction(
                         title = stringResource(MR.strings.action_update_category),
                         onClick = onClickRefresh,
-                    ),
-                    AppBar.OverflowAction(
-                        title = stringResource(MR.strings.action_open_random_manga),
-                        onClick = onClickOpenRandomManga,
                     ),
                 ).toMutableList().apply {
                     // SY -->

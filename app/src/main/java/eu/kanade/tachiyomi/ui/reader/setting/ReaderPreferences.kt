@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.reader.setting
 import android.os.Build
 import androidx.compose.ui.graphics.BlendMode
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.tachiyomi.ui.reader.viewer.navigation.CustomTapZones
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerConfig
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
@@ -12,7 +13,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
 
 class ReaderPreferences(
-    preferenceStore: PreferenceStore,
+    private val preferenceStore: PreferenceStore,
 ) {
 
     // region General
@@ -34,6 +35,8 @@ class ReaderPreferences(
     val doubleTapAnimSpeed: Preference<Int> = preferenceStore.getInt("pref_double_tap_anim_speed", 500)
 
     val showPageNumber: Preference<Boolean> = preferenceStore.getBoolean("pref_show_page_number_key", true)
+
+    val showSystemTime: Preference<Boolean> = preferenceStore.getBoolean("pref_show_system_time_key", true)
 
     val verticalNavigator: Preference<Set<ReadingMode>> = preferenceStore.getEnumSet(
         "pref_vertical_navigator",
@@ -73,6 +76,12 @@ class ReaderPreferences(
         true,
     )
 
+    /** 全局禁止双击缩放：对单页式（含动图）与条漫同时生效，只影响双击，不影响双指缩放。 */
+    val disableDoubleTapZoom: Preference<Boolean> = preferenceStore.getBoolean(
+        "pref_disable_double_tap_zoom",
+        false,
+    )
+
     val imageScaleType: Preference<Int> = preferenceStore.getInt("pref_image_scale_type_key", 1)
 
     val zoomStart: Preference<Int> = preferenceStore.getInt("pref_zoom_start_key", 1)
@@ -108,6 +117,58 @@ class ReaderPreferences(
     val skipDupe: Preference<Boolean> = preferenceStore.getBoolean("skip_dupe", false)
 
     val webtoonDisableZoomOut: Preference<Boolean> = preferenceStore.getBoolean("webtoon_disable_zoom_out", false)
+
+    // region 图像增强（AI 放大）
+    // 说明：以下键名、类型与默认值均与参考项目 mihon_img_upscale 保持一致
+
+    fun waifu2xEnabled() = preferenceStore.getBoolean("pref_waifu2x_enabled", false)
+
+    fun waifu2xNoiseLevel() = preferenceStore.getInt("pref_waifu2x_noise_level", 2)
+
+    fun anime4kEnabled() = preferenceStore.getBoolean("pref_anime4k_enabled", false)
+
+    fun anime4kMode() = preferenceStore.getInt("pref_anime4k_mode", 0) // 0: Fast, 1: High, 2: Ultra
+
+    fun realCuganEnabled() = preferenceStore.getBoolean("pref_realcugan_enabled", false)
+
+    fun realCuganNoiseLevel() = preferenceStore.getInt("pref_realcugan_noise_level", 0) // 0: No Denoise, 1: Denoise 1x, 2: Denoise 2x, 3: Denoise 3x, 4: Conservative
+
+    fun realCuganScale() = preferenceStore.getInt("pref_realcugan_scale", 2) // 2x, 3x, 4x
+
+    // 选中的模型用模型包描述符里的 key（字符串）持久化。
+    // 键名使用 *_key 变体：旧版本在同名键上存的是 Int，SharedPreferences 读取类型不一致会抛异常。
+    fun realCuganModel() = preferenceStore.getString("pref_realcugan_model_key", "")
+
+    fun realEsrganStyle() = preferenceStore.getInt("pref_realesrgan_style", 0) // 0: Anime, 1: Photo
+
+    fun realCuganPreloadSize() = preferenceStore.getInt("pref_realcugan_preload_size", 3)
+
+    fun realCuganProEnabled() = preferenceStore.getBoolean("pref_realcugan_pro_enabled", false)
+
+    fun realCuganPerformanceMode() = preferenceStore.getInt("pref_realcugan_performance_mode", 0) // 0: 90%, 1: 50%, 2: 30%
+
+    fun realCuganTileSize() = preferenceStore.getInt("pref_realcugan_tile_size", 128)
+
+    fun realCuganPrecision() = preferenceStore.getInt("pref_realcugan_precision", 0) // 0: FP16, 1: FP32, 2: INT8, 3: BF16
+
+    // 0: Vulkan, 1: Qualcomm NPU
+    // 默认使用 Vulkan：NPU 通路需要额外的 QNN 预编译 context（qnn-contexts/*.bin），本仓库暂未提供，
+    // 若默认走 NPU 会导致增强初始化失败、页面回退原图。
+    fun realCuganProcessingBackend() = preferenceStore.getInt("pref_realcugan_processing_backend", 0)
+
+    fun realCuganFp16Arithmetic() = preferenceStore.getBoolean("pref_realcugan_fp16_arithmetic", false)
+
+    fun realCuganMaxSizeWidth() = preferenceStore.getInt("pref_realcugan_max_size_width", 1600)
+
+    fun realCuganMaxSizeHeight() = preferenceStore.getInt("pref_realcugan_max_size_height", 1600)
+
+    fun realCuganSkipMaxSizeWidth() = preferenceStore.getInt("pref_realcugan_skip_max_size_width", 0)
+
+    fun realCuganSkipMaxSizeHeight() = preferenceStore.getInt("pref_realcugan_skip_max_size_height", 0)
+
+    fun realCuganShowStatus() = preferenceStore.getBoolean("pref_realcugan_show_status", true)
+
+    // endregion
 
     // endregion
 
@@ -182,6 +243,18 @@ class ReaderPreferences(
         "reader_tapping_inverted_webtoon",
         TappingInvertMode.NONE,
     )
+
+    // SY -->
+    val customNavigationPager: Preference<String> = preferenceStore.getString(
+        "reader_navigation_custom_pager",
+        CustomTapZones.serialize(CustomTapZones.pagerDefault),
+    )
+
+    val customNavigationWebtoon: Preference<String> = preferenceStore.getString(
+        "reader_navigation_custom_webtoon",
+        CustomTapZones.serialize(CustomTapZones.webtoonDefault),
+    )
+    // SY <--
 
     val showNavigationOverlayNewUser: Preference<Boolean> = preferenceStore.getBoolean(
         "reader_navigation_overlay_new_user",
@@ -273,6 +346,7 @@ class ReaderPreferences(
             MR.strings.edge_nav,
             MR.strings.right_and_left_nav,
             MR.strings.disabled_nav,
+            MR.strings.nav_custom,
         )
 
         val ImageScaleType = listOf(

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -32,6 +33,7 @@ import eu.kanade.presentation.browse.components.GlobalSearchCardRow
 import eu.kanade.presentation.browse.components.GlobalSearchErrorResultItem
 import eu.kanade.presentation.browse.components.GlobalSearchLoadingResultItem
 import eu.kanade.presentation.browse.components.GlobalSearchResultItem
+import eu.kanade.presentation.components.LocalTabScrollToTopState
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.ui.browse.feed.FeedScreenState
 import kotlinx.coroutines.delay
@@ -70,6 +72,16 @@ fun FeedScreen(
     onRefresh: () -> Unit,
     getMangaState: @Composable (Manga) -> State<Manga>,
 ) {
+    val listState = rememberLazyListState()
+    // SY -->
+    // 再次点击顶部当前标签时，列表带动画回到顶部
+    val tabScrollToTop = LocalTabScrollToTopState.current
+    LaunchedEffect(tabScrollToTop.nonce) {
+        if (tabScrollToTop.nonce > 0 && tabScrollToTop.isCurrentPage) {
+            listState.animateScrollToItem(0)
+        }
+    }
+    // SY <--
     when {
         state.isLoading -> LoadingScreen()
         state.isEmpty -> EmptyScreen(
@@ -93,6 +105,7 @@ fun FeedScreen(
                 enabled = !state.isLoadingItems,
             ) {
                 ScrollbarLazyColumn(
+                    state = listState,
                     contentPadding = contentPadding + topSmallPaddingValues,
                     modifier = Modifier.fillMaxSize(),
                 ) {

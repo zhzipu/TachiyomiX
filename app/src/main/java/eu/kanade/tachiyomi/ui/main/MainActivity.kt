@@ -51,8 +51,6 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.NavigatorDisposeBehavior
 import cafe.adriel.voyager.navigator.currentOrThrow
-import com.google.firebase.Firebase
-import com.google.firebase.analytics.analytics
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.source.interactor.GetIncognitoState
 import eu.kanade.presentation.components.AppStateBanners
@@ -60,7 +58,6 @@ import eu.kanade.presentation.components.DownloadedOnlyBannerBackgroundColor
 import eu.kanade.presentation.components.IncognitoModeBannerBackgroundColor
 import eu.kanade.presentation.components.IndexingBannerBackgroundColor
 import eu.kanade.presentation.more.settings.screen.ConfigureExhDialog
-import eu.kanade.presentation.more.settings.screen.about.WhatsNewDialog
 import eu.kanade.presentation.more.settings.screen.browse.ExtensionStoresScreen
 import eu.kanade.presentation.more.settings.screen.data.RestoreBackupScreen
 import eu.kanade.presentation.util.AssistContentScreen
@@ -83,7 +80,6 @@ import eu.kanade.tachiyomi.ui.setting.SettingsScreen
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.isBenchmarkBuildType
 import eu.kanade.tachiyomi.util.system.isNavigationBarNeedsScrim
-import eu.kanade.tachiyomi.util.system.isPreviewBuildType
 import eu.kanade.tachiyomi.util.view.setComposeContent
 import exh.debug.DebugToggles
 import exh.eh.EHentaiUpdateWorker
@@ -92,7 +88,6 @@ import exh.source.BlacklistedSources
 import exh.source.EH_SOURCE_ID
 import exh.source.EXH_SOURCE_ID
 import exh.source.ExhPreferences
-import exh.syDebugVersion
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -165,11 +160,8 @@ class MainActivity : BaseActivity() {
 
         super.onCreate(savedInstanceState)
 
-        val didMigration = if (isLaunch) {
-            addAnalytics()
+        if (isLaunch) {
             Migrator.awaitAndRelease()
-        } else {
-            false
         }
 
         // Do not let the launcher create a new activity http://stackoverflow.com/questions/16283079
@@ -189,6 +181,7 @@ class MainActivity : BaseActivity() {
             var incognito by remember { mutableStateOf(getIncognitoState.await(null)) }
             val downloadOnly by preferences.downloadedOnly.collectAsState()
             val indexing by downloadCache.isInitializing.collectAsState()
+            var showStartupQuote by remember { mutableStateOf(isLaunch) }
 
             val isSystemInDarkTheme = isSystemInDarkTheme()
             val statusBarBackgroundColor = when {
@@ -313,16 +306,13 @@ class MainActivity : BaseActivity() {
             }
             // SY <--
 
-            var showChangelog by remember { mutableStateOf(didMigration && !BuildConfig.DEBUG && !isBenchmarkBuildType) }
-            if (showChangelog) {
-                // SY -->
-                WhatsNewDialog(onDismissRequest = { showChangelog = false })
-                // SY <--
-            }
-
             // SY -->
             ConfigureExhDialog(run = runExhConfigureDialog, onRunning = { runExhConfigureDialog = false })
             // SY <--
+
+            if (showStartupQuote) {
+                StartupQuoteOverlay(onDone = { showStartupQuote = false })
+            }
         }
 
         val startTime = System.currentTimeMillis()
@@ -539,14 +529,6 @@ class MainActivity : BaseActivity() {
         return (scheme == "tachiyomi" && data?.host == "add-repo") ||
             (scheme == "mihon" && data?.host == "extension-store")
     }
-
-    // SY -->
-    private fun addAnalytics() {
-        if (!BuildConfig.DEBUG && isPreviewBuildType) {
-            Firebase.analytics.setUserProperty("preview_version", syDebugVersion)
-        }
-    }
-    // SY <--
 
     companion object {
         const val INTENT_SEARCH = "eu.kanade.tachiyomi.SEARCH"

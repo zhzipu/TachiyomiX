@@ -3,15 +3,25 @@ package eu.kanade.presentation.more.settings.screen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import eu.kanade.presentation.more.settings.Preference
+import eu.kanade.presentation.reader.settings.CustomTapZonesEditorDialog
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderBottomButton
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
+import eu.kanade.tachiyomi.ui.reader.viewer.navigation.CustomTapZones
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerConfig
 import eu.kanade.tachiyomi.util.system.hasDisplayCutout
+import eu.kanade.tachiyomi.util.system.toast
+import tachiyomi.core.common.util.lang.launchNonCancellable
+import tachiyomi.core.common.util.lang.withUIContext
+import tachiyomi.domain.manga.interactor.ResetViewerFlags
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
 import tachiyomi.presentation.core.i18n.pluralStringResource
@@ -119,6 +129,10 @@ object SettingsReaderScreen : SearchableSettings {
                     preference = readerPreferences.showPageNumber,
                     title = stringResource(MR.strings.pref_show_page_number),
                 ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = readerPreferences.showSystemTime,
+                    title = stringResource(MR.strings.pref_show_system_time),
+                ),
             ),
         )
     }
@@ -205,13 +219,19 @@ object SettingsReaderScreen : SearchableSettings {
         val imageScaleTypePref = readerPreferences.imageScaleType
         val dualPageSplitPref = readerPreferences.dualPageSplitPaged
         val rotateToFitPref = readerPreferences.dualPageRotateToFit
+        val customNavPref = readerPreferences.customNavigationPager
+        var showCustomTapZones by remember { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
+        val context = LocalContext.current
 
         val navMode by navModePref.collectAsState()
         val imageScaleType by imageScaleTypePref.collectAsState()
         val dualPageSplit by dualPageSplitPref.collectAsState()
         val rotateToFit by rotateToFitPref.collectAsState()
+        val customNav by customNavPref.collectAsState()
+        val customZones = remember(customNav) { CustomTapZones.parse(customNav) }
 
-        return Preference.PreferenceGroup(
+        val group = Preference.PreferenceGroup(
             title = stringResource(MR.strings.pager_viewer),
             preferenceItems = listOf(
                 Preference.PreferenceItem.ListPreference(
@@ -220,6 +240,18 @@ object SettingsReaderScreen : SearchableSettings {
                         .mapIndexed { index, it -> index to stringResource(it) }
                         .toMap(),
                     title = stringResource(MR.strings.pref_viewer_nav),
+                    onValueChanged = { newValue ->
+                        if (newValue == 6) {
+                            showCustomTapZones = true
+                        }
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_custom_tap_zones),
+                    subtitle = stringResource(MR.strings.pref_custom_tap_zones_summary),
+                    enabled = navMode == 6,
+                    onClick = { showCustomTapZones = true },
                 ),
                 Preference.PreferenceItem.ListPreference(
                     preference = readerPreferences.pagerNavInverted,
@@ -231,7 +263,7 @@ object SettingsReaderScreen : SearchableSettings {
                     )
                         .associateWith { stringResource(it.titleRes) },
                     title = stringResource(MR.strings.pref_read_with_tapping_inverted),
-                    enabled = navMode != 5,
+                    enabled = navMode != 5 && navMode != 6,
                 ),
                 Preference.PreferenceItem.ListPreference(
                     preference = imageScaleTypePref,
@@ -294,8 +326,38 @@ object SettingsReaderScreen : SearchableSettings {
                     title = stringResource(MR.strings.pref_page_rotate_invert),
                     enabled = rotateToFit,
                 ),
+                // 清空各作品记住的阅读器设置，恢复全局设置
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_clear_reader_personal_settings),
+                    subtitle = stringResource(MR.strings.pref_clear_reader_personal_settings_summary),
+                    onClick = {
+                        scope.launchNonCancellable {
+                            val success = Injekt.get<ResetViewerFlags>().await()
+                            withUIContext {
+                                val message = if (success) {
+                                    MR.strings.pref_reset_viewer_flags_success
+                                } else {
+                                    MR.strings.pref_reset_viewer_flags_error
+                                }
+                                context.toast(message)
+                            }
+                        }
+                    },
+                ),
             ),
         )
+
+        if (showCustomTapZones) {
+            CustomTapZonesEditorDialog(
+                initialZones = customZones,
+                onConfirm = { newZones ->
+                    customNavPref.set(CustomTapZones.serialize(newZones))
+                },
+                onDismiss = { showCustomTapZones = false },
+            )
+        }
+
+        return group
     }
 
     @Composable
@@ -306,13 +368,17 @@ object SettingsReaderScreen : SearchableSettings {
         val dualPageSplitPref = readerPreferences.dualPageSplitWebtoon
         val rotateToFitPref = readerPreferences.dualPageRotateToFitWebtoon
         val webtoonSidePaddingPref = readerPreferences.webtoonSidePadding
+        val customNavPref = readerPreferences.customNavigationWebtoon
+        var showCustomTapZones by remember { mutableStateOf(false) }
 
         val navMode by navModePref.collectAsState()
         val dualPageSplit by dualPageSplitPref.collectAsState()
         val rotateToFit by rotateToFitPref.collectAsState()
         val webtoonSidePadding by webtoonSidePaddingPref.collectAsState()
+        val customNav by customNavPref.collectAsState()
+        val customZones = remember(customNav) { CustomTapZones.parse(customNav) }
 
-        return Preference.PreferenceGroup(
+        val group = Preference.PreferenceGroup(
             title = stringResource(MR.strings.webtoon_viewer),
             preferenceItems = listOf(
                 Preference.PreferenceItem.ListPreference(
@@ -321,6 +387,18 @@ object SettingsReaderScreen : SearchableSettings {
                         .mapIndexed { index, it -> index to stringResource(it) }
                         .toMap(),
                     title = stringResource(MR.strings.pref_viewer_nav),
+                    onValueChanged = { newValue ->
+                        if (newValue == 6) {
+                            showCustomTapZones = true
+                        }
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_custom_tap_zones),
+                    subtitle = stringResource(MR.strings.pref_custom_tap_zones_summary),
+                    enabled = navMode == 6,
+                    onClick = { showCustomTapZones = true },
                 ),
                 Preference.PreferenceItem.ListPreference(
                     preference = readerPreferences.webtoonNavInverted,
@@ -332,7 +410,7 @@ object SettingsReaderScreen : SearchableSettings {
                     )
                         .associateWith { stringResource(it.titleRes) },
                     title = stringResource(MR.strings.pref_read_with_tapping_inverted),
-                    enabled = navMode != 5,
+                    enabled = navMode != 5 && navMode != 6,
                 ),
                 Preference.PreferenceItem.SliderPreference(
                     value = webtoonSidePadding,
@@ -400,6 +478,18 @@ object SettingsReaderScreen : SearchableSettings {
                 // SY <--
             ),
         )
+
+        if (showCustomTapZones) {
+            CustomTapZonesEditorDialog(
+                initialZones = customZones,
+                onConfirm = { newZones ->
+                    customNavPref.set(CustomTapZones.serialize(newZones))
+                },
+                onDismiss = { showCustomTapZones = false },
+            )
+        }
+
+        return group
     }
 
     // SY -->

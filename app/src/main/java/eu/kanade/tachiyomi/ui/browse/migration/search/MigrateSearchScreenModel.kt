@@ -17,7 +17,7 @@ class MigrateSearchScreenModel(
     getManga: GetManga = Injekt.get(),
     private val sourceManager: SourceManager = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
-) : SearchScreenModel() {
+) : SearchScreenModel(searchHistoryScope = "search_migration") {
 
     private val migrationSources by lazy { sourcePreferences.migrationSources.get() }
 

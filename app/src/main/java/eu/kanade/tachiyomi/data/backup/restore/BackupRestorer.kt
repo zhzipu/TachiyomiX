@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.backup.restore
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import eu.kanade.tachiyomi.data.backup.BackupDecoder
 import eu.kanade.tachiyomi.data.backup.BackupNotifier
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
@@ -16,6 +17,7 @@ import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.PreferenceRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.SavedSearchRestorer
 import eu.kanade.tachiyomi.data.download.DownloadCache
+import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
 import exh.source.MERGED_SOURCE_ID
 import kotlinx.coroutines.CoroutineScope
@@ -55,6 +57,8 @@ class BackupRestorer(
     // SY <--
 ) {
 
+    private val tag = "WebDavSync"
+
     private var restoreAmount = 0
     private val restoreProgress = AtomicInt(0)
     private val errors = CopyOnWriteArrayList<Pair<Date, String>>()
@@ -78,6 +82,18 @@ class BackupRestorer(
             }
         }
 
+        // Restored extension stores are written directly to the database, but the Plugin Store
+        // (available extensions) is served from an in-memory cache that only refreshes when
+        // findAvailableExtensions() is called. Re-trigger it here so stores synced or restored
+        // from a backup show up without a manual refresh or app restart.
+        if (options.extensionStores) {
+            try {
+                Injekt.get<ExtensionManager>().findAvailableExtensions()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to refresh extension stores after restore" }
+            }
+        }
+
         val time = System.currentTimeMillis() - startTime
 
         val logFile = writeErrorLog()
@@ -93,6 +109,15 @@ class BackupRestorer(
 
     private suspend fun restoreFromFile(uri: Uri, options: RestoreOptions) {
         val backup = BackupDecoder(context).decode(uri)
+
+        Log.i(
+            tag,
+            "restore start: manga=${backup.backupManga.size}, categories=${backup.backupCategories.size}, " +
+                "savedSearches=${backup.backupSavedSearches.size}, extStores=${backup.backupExtensionStores.size}, " +
+                "options=[library=${options.libraryEntries}, categories=${options.categories}, appSettings=${options.appSettings}, " +
+                "sourceSettings=${options.sourceSettings}, extStores=${options.extensionStores}, savedSearches=${options.savedSearches}], " +
+                "thread=${Thread.currentThread().name}",
+        )
 
         // Store source mapping for error messages
         val backupMaps = backup.backupSources
@@ -120,32 +145,39 @@ class BackupRestorer(
         }
 
         coroutineScope {
+            // SY: run restorers sequentially instead of in parallel. Each restorer writes to
+            // the same SQLite database; running them concurrently causes write-lock contention
+            // that surfaces as SQLITE_BUSY ("database is locked") when the connection pool's
+            // busy_timeout is not honored for pooled connections.
             if (options.categories) {
-                restoreCategories(backup.backupCategories)
+                restoreCategories(backup.backupCategories).join()
             }
             // SY -->
             if (options.savedSearches) {
-                restoreSavedSearches(backup.backupSavedSearches)
+                restoreSavedSearches(backup.backupSavedSearches).join()
             }
             // SY <--
             if (options.appSettings) {
-                restoreAppPreferences(backup.backupPreferences, backup.backupCategories.takeIf { options.categories })
+                restoreAppPreferences(backup.backupPreferences, backup.backupCategories.takeIf { options.categories }).join()
             }
             if (options.sourceSettings) {
-                restoreSourcePreferences(backup.backupSourcePreferences)
+                restoreSourcePreferences(backup.backupSourcePreferences).join()
             }
             if (options.libraryEntries) {
-                restoreManga(backup.backupManga, if (options.categories) backup.backupCategories else emptyList())
+                restoreManga(backup.backupManga, if (options.categories) backup.backupCategories else emptyList()).join()
             }
             if (options.extensionStores) {
-                restoreExtensionStores(backup.backupExtensionStores)
+                restoreExtensionStores(backup.backupExtensionStores).join()
             }
 
             // TODO: optionally trigger online library + tracker update
         }
+
+        Log.i(tag, "restore done: ${errors.size} item errors")
     }
 
     private fun CoroutineScope.restoreCategories(backupCategories: List<BackupCategory>) = launch {
+        Log.i(tag, "restoreCategories start: ${backupCategories.size} items, thread=${Thread.currentThread().name}")
         ensureActive()
         categoriesRestorer(backupCategories)
 
@@ -156,10 +188,12 @@ class BackupRestorer(
             restoreAmount,
             isSync,
         )
+        Log.i(tag, "restoreCategories done")
     }
 
     // SY -->
     private fun CoroutineScope.restoreSavedSearches(backupSavedSearches: List<BackupSavedSearch>) = launch {
+        Log.i(tag, "restoreSavedSearches start: ${backupSavedSearches.size} items, thread=${Thread.currentThread().name}")
         ensureActive()
         savedSearchRestorer.restoreSavedSearches(backupSavedSearches)
 
@@ -170,6 +204,7 @@ class BackupRestorer(
             restoreAmount,
             isSync,
         )
+        Log.i(tag, "restoreSavedSearches done")
     }
     // SY <--
 
@@ -177,6 +212,7 @@ class BackupRestorer(
         backupMangas: List<BackupManga>,
         backupCategories: List<BackupCategory>,
     ) = launch {
+        Log.i(tag, "restoreManga start: ${backupMangas.size} items, thread=${Thread.currentThread().name}")
         mangaRestorer.sortByNew(backupMangas)
             /* SY --> */.sortedBy { it.source == MERGED_SOURCE_ID } /* SY <-- */
             .chunked(100)
@@ -197,12 +233,14 @@ class BackupRestorer(
                 }
                 notifier.showRestoreProgress(chunk.last().title, restoreProgress.load(), restoreAmount, isSync)
             }
+        Log.i(tag, "restoreManga done")
     }
 
     private fun CoroutineScope.restoreAppPreferences(
         preferences: List<BackupPreference>,
         categories: List<BackupCategory>?,
     ) = launch {
+        Log.i(tag, "restoreAppPreferences start: ${preferences.size} items, thread=${Thread.currentThread().name}")
         ensureActive()
         preferenceRestorer.restoreApp(
             preferences,
@@ -216,9 +254,11 @@ class BackupRestorer(
             restoreAmount,
             isSync,
         )
+        Log.i(tag, "restoreAppPreferences done")
     }
 
     private fun CoroutineScope.restoreSourcePreferences(preferences: List<BackupSourcePreferences>) = launch {
+        Log.i(tag, "restoreSourcePreferences start: ${preferences.size} items, thread=${Thread.currentThread().name}")
         ensureActive()
         preferenceRestorer.restoreSource(preferences)
 
@@ -229,11 +269,13 @@ class BackupRestorer(
             restoreAmount,
             isSync,
         )
+        Log.i(tag, "restoreSourcePreferences done")
     }
 
     private fun CoroutineScope.restoreExtensionStores(
         backupExtensionStores: List<BackupExtensionStore>,
     ) = launch {
+        Log.i(tag, "restoreExtensionStores start: ${backupExtensionStores.size} items, thread=${Thread.currentThread().name}")
         backupExtensionStores
             .chunked(100)
             .forEach { chunk ->
@@ -257,6 +299,7 @@ class BackupRestorer(
                     isSync,
                 )
             }
+        Log.i(tag, "restoreExtensionStores done")
     }
 
     private fun writeErrorLog(): File {

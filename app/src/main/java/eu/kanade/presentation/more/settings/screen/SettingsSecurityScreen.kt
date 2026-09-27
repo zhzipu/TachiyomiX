@@ -1,6 +1,7 @@
 package eu.kanade.presentation.more.settings.screen
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,6 +11,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.Calculate
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -30,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
@@ -52,6 +59,8 @@ import eu.kanade.tachiyomi.ui.category.biometric.BiometricTimesScreen
 import eu.kanade.tachiyomi.util.storage.CbzCrypto
 import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.authenticate
 import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.isAuthenticationSupported
+import eu.kanade.tachiyomi.util.system.LauncherDisguise
+import eu.kanade.tachiyomi.util.system.toast
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
@@ -211,10 +220,103 @@ object SettingsSecurityScreen : SearchableSettings {
                     )
                 },
                 // SY <--
+                kotlin.run {
+                    val currentAlias = LauncherDisguise.normalize(securityPreferences.fakeLauncherIcon.get())
+                    var dialogOpen by remember { mutableStateOf(false) }
+                    if (dialogOpen) {
+                        DisguiseDialog(
+                            selectedAlias = currentAlias,
+                            onDismissRequest = { dialogOpen = false },
+                            onSelect = { alias ->
+                                dialogOpen = false
+                                securityPreferences.fakeLauncherIcon.set(alias)
+                                LauncherDisguise.apply(context, alias)
+                                context.toast(MR.strings.disguise_app_icon_hint)
+                            },
+                        )
+                    }
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(MR.strings.disguise_app_icon),
+                        subtitle = stringResource(disguiseNameRes(currentAlias)),
+                        onClick = { dialogOpen = true },
+                    )
+                },
                 Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.secure_screen_summary)),
             ),
         )
     }
+
+    // SY -->
+    private fun disguiseNameRes(alias: String): StringResource = when (alias) {
+        LauncherDisguise.FAKE_CALC -> MR.strings.fake_app_name_calc
+        LauncherDisguise.FAKE_NOTE -> MR.strings.fake_app_name_note
+        LauncherDisguise.FAKE_STUDY -> MR.strings.fake_app_name_study
+        else -> MR.strings.app_name
+    }
+
+    private data class DisguiseOption(
+        val alias: String,
+        val nameRes: StringResource,
+        val icon: ImageVector,
+    )
+
+    private val disguiseOptions = listOf(
+        DisguiseOption(LauncherDisguise.DEFAULT, MR.strings.app_name, Icons.Outlined.MenuBook),
+        DisguiseOption(LauncherDisguise.FAKE_CALC, MR.strings.fake_app_name_calc, Icons.Outlined.Calculate),
+        DisguiseOption(LauncherDisguise.FAKE_NOTE, MR.strings.fake_app_name_note, Icons.Outlined.EditNote),
+        DisguiseOption(LauncherDisguise.FAKE_STUDY, MR.strings.fake_app_name_study, Icons.Outlined.School),
+    )
+
+    /**
+     * 伪装应用选择弹窗：列出各桌面入口的名称与图标，当前生效项打勾。
+     */
+    @Composable
+    fun DisguiseDialog(
+        selectedAlias: String,
+        onDismissRequest: () -> Unit,
+        onSelect: (String) -> Unit,
+    ) {
+        AlertDialog(
+            onDismissRequest = onDismissRequest,
+            title = { Text(text = stringResource(MR.strings.disguise_app_icon)) },
+            text = {
+                Column {
+                    disguiseOptions.forEach { option ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(option.alias) }
+                                .padding(vertical = 12.dp),
+                        ) {
+                            Icon(imageVector = option.icon, contentDescription = null)
+                            Text(
+                                text = stringResource(option.nameRes),
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(start = 16.dp),
+                            )
+                            if (option.alias == selectedAlias) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            properties = DialogProperties(usePlatformDefaultWidth = true),
+            confirmButton = {
+                TextButton(onClick = onDismissRequest) {
+                    Text(text = stringResource(MR.strings.action_cancel))
+                }
+            },
+        )
+    }
+    // SY <--
 
     // SY -->
     enum class DayOption(val day: Int, val stringRes: StringResource) {
@@ -382,11 +484,6 @@ object SettingsSecurityScreen : SearchableSettings {
                     preference = privacyPreferences.crashlytics,
                     title = stringResource(MR.strings.onboarding_permission_crashlytics),
                     subtitle = stringResource(MR.strings.onboarding_permission_crashlytics_description),
-                ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = privacyPreferences.analytics,
-                    title = stringResource(MR.strings.onboarding_permission_analytics),
-                    subtitle = stringResource(MR.strings.onboarding_permission_analytics_description),
                 ),
                 Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.firebase_summary)),
             ),

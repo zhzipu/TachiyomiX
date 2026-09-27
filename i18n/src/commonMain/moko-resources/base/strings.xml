@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">TachiyomiSY</string>
+    <string name="app_name" translatable="false">TachiyomiX</string>
+
+    <!-- SY: App disguise -->
+    <string name="fake_app_name_calc">Calculator</string>
+    <string name="fake_app_name_note">Notes</string>
+    <string name="fake_app_name_study">Study</string>
+    <string name="disguise_app_icon">Disguise app</string>
+    <string name="disguise_app_icon_summary">Change the name and icon shown on the home screen</string>
+    <string name="disguise_app_icon_select">Choose the icon shown on the home screen</string>
+    <string name="disguise_app_icon_hint">Applied. The launcher icon may take a while to refresh; the app might briefly appear as not installed.</string>
+    <!-- SY -->
 
     <!-- Generic strings -->
     <string name="on">On</string>
@@ -73,10 +83,15 @@
     <string name="action_sort_random">Random</string>
     <string name="action_search">Search</string>
     <string name="action_search_hint">Search…</string>
+    <string name="clear_search_history">Clear search history</string>
     <string name="action_search_settings">Search settings</string>
     <string name="action_global_search">Global search</string>
     <string name="action_select_all">Select all</string>
     <string name="action_select_inverse">Select inverse</string>
+    <!-- SY -->
+    <string name="action_bulk_select">Multi-select</string>
+    <string name="action_deselect_all">Deselect all</string>
+    <!-- SY -->
     <string name="action_mark_as_read">Mark as read</string>
     <string name="action_mark_as_unread">Mark as unread</string>
     <string name="action_mark_previous_as_read">Mark previous as read</string>
@@ -193,8 +208,8 @@
     <string name="onboarding_permission_notifications_description">Get notified for library updates and more.</string>
     <string name="onboarding_permission_ignore_battery_opts">Background battery usage</string>
     <string name="onboarding_permission_ignore_battery_opts_description">Avoid interruptions to long-running library updates, downloads, and backup restores.</string>
-    <string name="onboarding_permission_crashlytics">Send crash logs</string>
-    <string name="onboarding_permission_crashlytics_description">Send anonymized crash logs to the developers.</string>
+    <string name="onboarding_permission_crashlytics">Save logs to device</string>
+    <string name="onboarding_permission_crashlytics_description">Save crash logs to the local device.</string>
     <string name="onboarding_permission_analytics">Allow analytics</string>
     <string name="onboarding_permission_analytics_description">Send anonymized usage data to improve app features.</string>
     <string name="onboarding_permission_action_grant">Grant</string>
@@ -211,6 +226,7 @@
     <string name="pref_category_tracking">Tracking</string>
     <string name="pref_category_advanced">Advanced</string>
     <string name="pref_category_about">About</string>
+    <string name="pref_about_summary">About the app</string>
 
     <string name="pref_appearance_summary">Theme, date &amp; time format</string>
     <string name="pref_library_summary">Categories, global update, chapter swipe</string>
@@ -253,7 +269,7 @@
 
     <string name="pref_category_security">Security and privacy</string>
     <string name="pref_security">Security</string>
-    <string name="pref_firebase">Analytics and Crash logs</string>
+    <string name="pref_firebase">Logs</string>
 
     <string name="lock_with_biometrics">Require unlock</string>
     <string name="lock_when_idle">Lock when idle</string>
@@ -262,7 +278,7 @@
     <string name="hide_notification_content">Hide notification content</string>
     <string name="secure_screen">Secure screen</string>
     <string name="secure_screen_summary">Secure screen hides app contents when switching apps and block screenshots</string>
-    <string name="firebase_summary">Sending crash logs and analytics will allow us to identify and fix issues, improve performance, and make future updates more relevant to your needs</string>
+    <string name="firebase_summary">Save crash logs locally to help identify and fix issues.</string>
 
     <string name="pref_category_nsfw_content">NSFW (18+) sources</string>
     <string name="pref_show_nsfw_source">Show in sources and extensions lists</string>
@@ -357,8 +373,10 @@
     <string name="ext_installer_packageinstaller" translatable="false">PackageInstaller</string>
     <string name="ext_installer_shizuku" translatable="false">Shizuku</string>
     <string name="ext_installer_private" translatable="false">Private</string>
+    <!-- SY --> <string name="ext_installer_installerx" translatable="false">InstallerX Revived</string> <!-- SY -->
     <string name="ext_installer_shizuku_stopped">Shizuku is not running</string>
     <string name="ext_installer_shizuku_unavailable_dialog">Install and start Shizuku to use Shizuku as extension installer.</string>
+    <!-- SY --> <string name="ext_installer_installerx_unavailable_dialog">InstallerX Revived was not found on this device. Install it and finish its setup, then pick this installer again. Open its project page?</string> <!-- SY -->
     <string name="ext_revoke_trust">Revoke trusted unknown extensions</string>
 
     <!-- Extension repos -->
@@ -399,6 +417,81 @@
     <string name="pref_flash_style_white_black">White and Black</string>
     <string name="pref_double_tap_anim_speed">Double tap animation speed</string>
     <string name="pref_show_page_number">Show page number</string>
+    <string name="reader_image_enhancement">Image enhancement</string>
+    <string name="reader_enhancement_settings">Enhancement settings</string>
+    <string name="reader_spatial_scene">Spatial depth model</string>
+    <string name="reader_spatial_scene_loading">Creating spatial scene…</string>
+    <string name="reader_spatial_scene_runtime_unavailable">Spatial images require Android 12+ and a supported Snapdragon HTP</string>
+    <string name="reader_spatial_scene_failed">Unable to create spatial scene: %1$s</string>
+    <string name="reader_spatial_scene_single_page_only">Spatial scenes currently support single-page paged reading only</string>
+    <string name="reader_spatial_rotation_anchor">Rotation anchor</string>
+    <string name="reader_spatial_rotation_anchor_pick">Tap image to set anchor</string>
+    <string name="reader_spatial_rotation_anchor_set">Rotation anchor set</string>
+    <string name="reader_spatial_gyro_sensitivity">Gyroscope %1$s×</string>
+    <string name="reader_spatial_gyro_reset">Recenter gyroscope</string>
+    <string name="reader_spatial_gyro_reset_done">Current pose set as gyroscope center</string>
+    <string name="reader_spatial_depth_strength">Depth %1$s×</string>
+    <string name="reader_spatial_rotation_angle">%1$s-axis angle %2$s°</string>
+    <string name="reader_spatial_rotation_angles">Rotation angles</string>
+    <string name="reader_spatial_rotation_reset">Reset angles</string>
+    <string name="reader_spatial_scene_download_title">Download the spatial depth model?</string>
+    <string name="reader_spatial_scene_download_message">Downloads about 101 MB and installs the Depth Anything V3 model. No person segmentation or background replacement is used. The first run compiles the model for this Snapdragon device.</string>
+    <string name="reader_spatial_scene_download">Download</string>
+    <string name="reader_spatial_scene_downloading">Downloading the spatial depth model: %1$d%%</string>
+    <string name="reader_spatial_scene_download_failed">Model download failed: %1$s</string>
+    <string name="reader_spatial_scene_compile_title">Preparing spatial image</string>
+    <string name="reader_spatial_scene_compiling">Compiling the depth model for %1$s. This only happens on the first run and may take a few minutes.</string>
+    <string name="reader_spatial_scene_progress_title">Creating spatial image</string>
+    <string name="reader_spatial_scene_stage_preparing">Reading the current page…</string>
+    <string name="reader_spatial_scene_stage_waiting_enhancement">Waiting for image enhancement to finish…</string>
+    <string name="reader_spatial_scene_stage_inferring">Estimating depth and building the scene…</string>
+    <string name="reader_spatial_scene_exit">Exit</string>
+    <string name="reader_feature_not_available">This feature is not available in this build yet</string>
+    <string name="pref_model_packs">Model packs</string>
+    <string name="pref_model_packs_summary">Manage AI image enhancement model packs</string>
+    <string name="pref_model_packs_installed">Installed</string>
+    <string name="pref_model_packs_none_installed">No model pack is installed yet</string>
+    <string name="pref_model_packs_installed_summary">ID %1$s · version %2$s · %3$s</string>
+    <string name="pref_model_packs_install_hint">Model packs are installed manually: get the matching model pack APK, install it with the system installer, then come back to this screen.</string>
+    <string name="pref_model_packs_uninstall_failed">Couldn\'t open the system uninstall screen</string>
+    <string name="reader_processing_backend">Processing backend</string>
+    <string name="reader_backend_vulkan">Vulkan GPU</string>
+    <string name="reader_backend_qualcomm_npu">Qualcomm NPU</string>
+    <string name="reader_model">Model</string>
+    <string name="reader_model_style">Model style</string>
+    <string name="reader_model_pack_none_available">No usable model pack is installed, so image enhancement cannot take effect.</string>
+    <string name="reader_model_pack_manage_hint">Model packs are installed and managed in Settings → Advanced → Data → Model packs.</string>
+    <string name="reader_denoise_level">Denoise level</string>
+    <string name="reader_denoise_level_value">%1$dx</string>
+    <string name="reader_none">None</string>
+    <string name="reader_conservative">Conservative</string>
+    <string name="reader_scale_factor">Scale factor</string>
+    <string name="reader_scale_factor_value">%1$dx</string>
+    <string name="reader_scale_fixed_value">%1$dx (fixed)</string>
+    <string name="reader_preload_pages">Preload pages</string>
+    <string name="reader_preload_pages_value">%1$d pages</string>
+    <string name="reader_preload_pages_chapter">This chapter</string>
+    <string name="enhancement_under_construction">Under construction…</string>
+    <string name="enhancement_chapter_queued">Added this chapter to the enhancement queue</string>
+    <string name="reader_gpu_performance_mode">GPU performance mode</string>
+    <string name="reader_gpu_performance_high">Performance 90%</string>
+    <string name="reader_gpu_performance_balanced">Balanced 50%</string>
+    <string name="reader_gpu_performance_power_saving">Power saving 30%</string>
+    <string name="reader_tile_size">Tile size</string>
+    <string name="reader_precision">Precision</string>
+    <string name="reader_precision_fp16">FP16</string>
+    <string name="reader_precision_fp32">FP32</string>
+    <string name="reader_precision_int8">INT8</string>
+    <string name="reader_precision_bf16">BF16</string>
+    <string name="reader_fp16_arithmetic">FP16 arithmetic</string>
+    <string name="reader_processing_resolution">Max processing resolution</string>
+    <string name="reader_max_resolution">Max resolution</string>
+    <string name="reader_resolution_width">Width (0 unlimited)</string>
+    <string name="reader_resolution_height">Height (0 unlimited)</string>
+    <string name="reader_show_processing_status">Show processing status in bottom-left corner</string>
+    <string name="reader_enhancing_page">Enhancing page %1$d · %2$d%%</string>
+    <string name="reader_enhancing_page_queued">Enhancing page %1$d · %2$d%% · %3$d queued</string>
+    <string name="pref_show_system_time">Show system time</string>
     <string name="pref_vertical_navigator">Use vertical chapter navigator in</string>
     <string name="pref_vertical_navigator_height">Vertical navigator height</string>
     <string name="pref_webtoon_vertical_navigator_on_left">Place vertical navigator on the left side</string>
@@ -452,6 +545,11 @@
     <string name="nav_zone_next">Next</string>
     <string name="nav_zone_left">Left</string>
     <string name="nav_zone_right">Right</string>
+    <string name="nav_custom">Custom</string>
+    <string name="pref_custom_tap_zones">Custom tap zones</string>
+    <string name="pref_custom_tap_zones_summary">The screen is divided into a 3×3 grid. Tap a zone to set its action.</string>
+    <string name="pref_custom_tap_zones_zone">Zone %1$s</string>
+    <string name="simulated_page">Simulated page</string>
     <string name="left_to_right_viewer">Paged (left to right)</string>
     <string name="right_to_left_viewer">Paged (right to left)</string>
     <string name="vertical_viewer">Paged (vertical)</string>
@@ -510,6 +608,11 @@
     <string name="storage_failed_to_create_download_directory">Failed to create download directory</string>
     <string name="storage_failed_to_create_directory">Failed to create directory: %s</string>
     <string name="disabled">Disabled</string>
+    <!-- SY -->
+    <string name="index_bar_position">Index bar position</string>
+    <string name="index_bar_left">Left</string>
+    <string name="index_bar_right">Right</string>
+    <!-- SY -->
     <string name="last_read_chapter">Last read chapter</string>
     <string name="second_to_last">Second to last read chapter</string>
     <string name="third_to_last">Third to last read chapter</string>
@@ -583,6 +686,7 @@
     <string name="last_auto_backup_info">Last automatically backed up: %s</string>
     <string name="label_data">Data</string>
     <string name="pref_storage_usage">Storage usage</string>
+    <string name="pref_clear_image_enhancement_cache">Clear image enhancement cache</string>
     <string name="available_disk_space_info">Available: %1$s / Total: %2$s</string>
     <string name="pref_clear_chapter_cache">Clear chapter cache</string>
     <string name="used_cache">Used: %1$s</string>
@@ -625,6 +729,8 @@
     <string name="pref_reset_viewer_flags_summary">Resets reading mode and orientation of all series</string>
     <string name="pref_reset_viewer_flags_success">All reader settings reset</string>
     <string name="pref_reset_viewer_flags_error">Couldn\'t reset reader settings</string>
+    <string name="pref_clear_reader_personal_settings">Clear personalized settings</string>
+    <string name="pref_clear_reader_personal_settings_summary">Clears the reader settings remembered for every series and falls back to the global settings</string>
     <string name="pref_dump_crash_logs">Share crash logs</string>
     <string name="pref_dump_crash_logs_summary">Saves error logs to a file for sharing with the developers</string>
     <string name="label_background_activity">Background activity</string>
@@ -757,6 +863,7 @@
     <string name="sort_by_number">By chapter number</string>
     <string name="sort_by_upload_date">By upload date</string>
     <string name="manga_download">Download</string>
+    <string name="download_all_chapters">All chapters</string>
     <string name="download_unread">Unread</string>
     <string name="download_bookmarked">Bookmarked</string>
     <string name="custom_cover">Custom cover</string>

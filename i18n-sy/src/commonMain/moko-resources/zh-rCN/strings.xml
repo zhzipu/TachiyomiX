@@ -8,6 +8,8 @@
     <string name="action_clean_titles">清除标题</string>
     <string name="action_start_reading">开始阅读</string>
     <string name="action_edit_info">编辑信息</string>
+    <string name="action_source_settings">插件设置</string>
+    <string name="action_modify_source_settings">修改插件设置</string>
     <!-- Entry Type -->
     <string name="entry_type_manga">日漫</string>
     <string name="entry_type_manhwa">韩漫</string>
@@ -173,8 +175,103 @@
     <string name="pref_source_source_filtering_summery">筛选属于类别的图源，使属于某个类别的图源不会被放在语言下</string>
     <string name="pref_source_navigation">替换最新按钮</string>
     <string name="pref_source_navigation_summery">用一个包括最新和浏览的自定义浏览视图取代最新按钮</string>
+    <string name="pref_source_home_page">图源首页</string>
+    <string name="pref_source_home_page_summery">点击图源后直接打开的页面：%s</string>
+    <string name="pref_source_home_page_navigation">导航</string>
     <string name="pref_local_source_hidden_folders">本地图源隐藏文件夹</string>
     <string name="pref_local_source_hidden_folders_summery">允许本地源读取隐藏文件夹</string>
+    <!-- Network source -->
+    <string name="network_source">网络图源</string>
+    <string name="chapter_no_data">无数据</string>
+    <string name="download_toast_completed">%1$s %2$s 下载完成</string>
+    <string name="upload_toast_completed">%1$s 上传完成</string>
+    <string name="upload_toast_completed_skipped">%1$s 上传完成，跳过 %2$s 章（本地没有文件）</string>
+    <string name="network_source_protocol">协议</string>
+    <string name="network_source_protocol_webdav">WebDAV</string>
+    <string name="network_source_protocol_ftp">FTP</string>
+    <string name="network_source_server_url">服务器地址</string>
+    <string name="network_source_server_url_summery">服务器地址。WebDAV 形如 http://192.168.1.10:5005，FTP 形如 ftp://192.168.1.10:2121。端口写进地址里（不写则 WebDAV 用 80/443、FTP 用 21）；库目录会自动建在该地址下面。</string>
+    <string name="network_source_username">用户名</string>
+    <string name="network_source_password">密码</string>
+    <string name="network_source_test_connection">测试连接</string>
+    <string name="network_source_test_connection_summery">检查地址、账号密码与写权限：必要时会把库目录建出来，然后列一次目录。</string>
+    <string name="network_source_test_running">正在测试连接…</string>
+    <string name="network_source_test_ok">连接成功，库中有 %1$d 本漫画。</string>
+    <string name="network_source_test_ok_empty">连接成功，库里还没有漫画。</string>
+    <string name="network_source_auto_upload">下载项目自动上传</string>
+    <string name="network_source_auto_upload_summery">开启后，书架「下载」分类里下载完毕的漫画会自动打包上传到本图源的 WebDAV 库。服务器上已有同名漫画时会合并，只补缺失的章节。</string>
+    <string name="network_source_bypass_proxy">不通过软件代理</string>
+    <string name="network_source_bypass_proxy_summery">推荐开启。直连服务器，绕过软件内置代理和手动 HTTP 代理。局域网里的 WebDAV（NAS、路由器、本机）通过外网代理节点访问不通，表现就是 HTTP 502。只有当服务器在公网、确实需要走代理时才关闭。</string>
+    <string name="network_source_not_configured">网络图源尚未配置。请先打开图源设置填写主机地址。</string>
+    <string name="network_source_auth_failed">认证失败，请检查用户名和密码。</string>
+    <string name="network_source_connection_failed">无法连接到服务器：%s</string>
+    <!-- 上传到网络图源的 WebDAV 库 -->
+    <string name="action_upload">上传</string>
+    <string name="upload_channel_group">上传</string>
+    <string name="upload_notifier_title">正在上传 %s</string>
+    <string name="upload_notifier_progress">已处理 %1$d / %2$d 章</string>
+    <string name="upload_notifier_completed">已上传 %1$d 章到 %2$s</string>
+    <string name="upload_notifier_failed">%s 上传失败</string>
+    <string name="upload_network_source_missing">网络图源不可用。</string>
+    <string name="upload_not_configured">网络图源尚未配置，请先打开图源设置填写连接信息。</string>
+    <string name="upload_no_downloaded_chapters">没有已下载的章节可以上传。</string>
+    <string name="upload_queued">已加入上传队列</string>
+    <string name="upload_conflict_title">服务器上已有同名漫画</string>
+    <string name="upload_conflict_message">服务器上已经存在「%1$s」（文件夹 %2$s）。要合并进去，还是新建一个文件夹？</string>
+    <string name="upload_conflict_merge">合并</string>
+    <string name="upload_conflict_new_folder">新建文件夹</string>
+    <string name="library_progress_pages">已下载 %1$d/%2$d 页</string>
+    <string name="download_category_delete_title">删除下载</string>
+    <string name="download_category_delete_confirm">删除</string>
+    <string name="download_category_delete_message">将删除所选漫画在本机已下载的章节，并把它们移出「下载」分类。漫画仍保留在书架的其他分类中。</string>
+    <string name="library_progress_upload_pages">已上传 %1$d/%2$d 页</string>
+    <string name="library_progress_chapters">已下载 %1$d/%2$d 话</string>
+    <string name="library_progress_upload_chapters">已上传 %1$d/%2$d 话</string>
+    <string name="download_continue_all">继续</string>
+    <string name="download_continue_all_queued">已加入 %1$d 话</string>
+    <string name="download_continue_all_nothing">没有需要下载的章节</string>
+    <!-- 上传队列 -->
+    <string name="label_upload_queue">上传队列</string>
+    <string name="information_no_uploads">无上传任务</string>
+    <string name="action_order_by_title">按标题排序</string>
+    <string name="action_cancel_all_uploads">全部取消</string>
+    <string name="upload_status_queued">排队中</string>
+    <string name="upload_status_uploading">正在上传</string>
+    <string name="upload_status_waiting_confirm">等待确认</string>
+    <string name="upload_status_completed">已完成</string>
+    <string name="upload_status_error">上传失败</string>
+    <string name="upload_status_cancelled">已取消</string>
+    <string name="upload_queue_summary_paused">已暂停 · 还有 %1$d 话</string>
+    <string name="upload_queue_summary_running">还有 %1$d 话</string>
+    <string name="upload_queue_summary_idle">上传中…</string>
+    <!-- 拖入上传队列 -->
+    <string name="action_add_to_upload_queue">拖入队列</string>
+    <string name="upload_queue_added">已加入上传队列：%1$d 话</string>
+    <string name="upload_manga_queued">已加入上传队列：%1$d 本</string>
+    <!-- 上传队列里的「下载」入口 -->
+    <string name="action_download_manager">下载</string>
+
+    <!-- 下载页的「下载 / 上传」合并操作 -->
+    <string name="action_pause_all">暂停</string>
+    <string name="action_download">下载</string>
+    <string name="action_upload">上传</string>
+    <string name="action_download_and_upload">下载和上传</string>
+    <string name="download_pause_dialog_title">暂停</string>
+    <string name="download_resume_dialog_title">继续</string>
+    <string name="upload_scope_dialog_title">上传哪些章节</string>
+    <string name="upload_scope_previous">继续之前的任务</string>
+    <string name="upload_scope_all">全部章节</string>
+    <string name="action_paused_downloads">已暂停下载</string>
+    <string name="action_paused_uploads">已暂停上传</string>
+    <string name="action_paused_both">已暂停下载和上传</string>
+    <!-- 清除 WebDAV 内容 -->
+    <string name="pref_clear_webdav">清除 WebDAV 内容</string>
+    <string name="pref_clear_webdav_summary">删除服务器上「TachiyomiX manga」里的全部内容</string>
+    <string name="pref_clear_webdav_confirm_title">要清除 WebDAV 内容吗？</string>
+    <string name="pref_clear_webdav_confirm_message">这会永久删除服务器上「TachiyomiX manga」里的所有漫画文件夹和文件，删掉之后无法恢复。</string>
+    <string name="pref_clear_webdav_done">已删除 %1$d 项</string>
+    <string name="pref_clear_webdav_failed">清除失败：%1$s</string>
+    <string name="action_delete">删除</string>
     <!-- Backup settings -->
     <string name="custom_entry_info">自定义作品信息</string>
     <string name="all_read_entries">所有已阅读的作品</string>
@@ -238,6 +335,7 @@
     <string name="reader_bottom_buttons">阅读器底部按钮</string>
     <string name="reader_bottom_buttons_summary">自定义显示在阅读器底部的按钮</string>
     <string name="pref_smooth_scroll">平滑自动翻页</string>
+    <string name="pref_disable_double_tap_zoom">禁止双击缩放</string>
     <!-- Reader -->
     <!-- Reader Actions -->
     <string name="eh_autoscroll">自动翻页</string>
@@ -331,6 +429,10 @@
     <string name="save_search_delete_message">你确定要删除你的搜索查询：\'%1$s\'？</string>
     <string name="save_search_invalid">保存的搜索无效，过滤器已经改变</string>
     <string name="save_search_invalid_name">无效的搜索名称</string>
+    <!-- Search History -->
+    <string name="search_history">搜索历史</string>
+    <string name="clear_search_history">清除搜索历史</string>
+    <string name="add_to_tag">加入标签栏</string>
     <!-- Source Categories -->
     <string name="no_source_categories">没有可用的图源类别</string>
     <string name="invalid_category_name">无效的类别名称</string>
@@ -581,8 +683,25 @@
     <string name="update_3hour">每3小时</string>
     <string name="label_sync">同步</string>
     <string name="label_triggers">触发条件</string>
+
+    <!-- About logo easter egg -->
+    <string name="about_logo_tap_1">别点，没用</string>
+    <string name="about_logo_tap_2">说了别点！</string>
+    <string name="about_logo_tap_3">操你妈(ʘдʘ╬)</string>
+
+    <string name="about_project_url">项目地址</string>
+    <string name="about_check_update">检查更新</string>
+    <string name="about_update_latest">已是最新版本</string>
+    <string name="about_update_check_failed">检查更新失败</string>
+
     <string name="sync_error">书架同步失败</string>
     <string name="sync_complete">书架同步完成</string>
+    <string name="sync_download_failed">下载同步数据失败：%1$s</string>
+    <string name="sync_missing_etag">缺少 ETag</string>
+    <string name="sync_no_remote_data">远程服务器上没有数据。</string>
+    <string name="sync_success_completed">同步成功完成</string>
+    <string name="sync_updated_remote">远程数据更新成功</string>
+    <string name="sync_upload_failed">上传同步数据失败：%1$s</string>
     <string name="pref_sync_api_key">API 密钥</string>
     <string name="pref_sync_now">立即同步</string>
     <string name="pref_sync_now_subtitle">立即开始同步数据</string>
@@ -617,6 +736,43 @@
     <string name="error_deleting_google_drive_lock_file">删除谷歌云端硬盘文件锁时发生错误</string>
     <string name="pref_sync_now_group_title">同步操作</string>
     <string name="pref_purge_confirmation_message">清除同步数据会从谷歌云端硬盘删除所有已同步的数据，你确定吗？</string>
+    <string name="webdav">WebDAV</string>
+    <string name="pref_webdav_url">服务器地址</string>
+    <string name="pref_webdav_url_summ">填入 WebDAV 服务器地址（例如 https://example.com/remote.php/dav/files/user）</string>
+    <string name="pref_webdav_username">用户名</string>
+    <string name="pref_webdav_password">密码</string>
+    <string name="pref_webdav_test_connection">测试连接</string>
+    <string name="webdav_connection_test_success">WebDAV 连接成功</string>
+    <string name="webdav_connection_test_failed">WebDAV 连接失败</string>
+    <string name="pref_webdav_purge_sync_data">从 WebDAV 清除同步的数据</string>
+    <string name="webdav_sync_data_purged">同步数据已从 WebDAV 清除</string>
+    <string name="webdav_sync_data_not_found">未能在 WebDAV 服务器找到同步的数据</string>
+    <string name="webdav_sync_data_purge_error">从 WebDAV 服务器清除同步的数据失败</string>
+    <string name="webdav_not_configured">未配置 WebDAV 服务器</string>
+    <string name="pref_purge_confirmation_webdav_message">清除同步数据会从 WebDAV 删除所有已同步的数据，你确定吗？</string>
+    <string name="aliyun_pan">阿里云盘</string>
+    <string name="pref_aliyun_pan_sign_in">登录</string>
+    <string name="pref_aliyun_pan_sign_in_summ">使用阿里云盘 App 扫码登录，自动获取刷新令牌</string>
+    <string name="aliyun_pan_login_success">已登录阿里云盘</string>
+    <string name="aliyun_pan_qr_waiting">请用阿里云盘 App 扫码登录</string>
+    <string name="aliyun_pan_qr_scanned">已扫码，请在手机上确认</string>
+    <string name="aliyun_pan_qr_expired">二维码已过期，请刷新后重试</string>
+    <string name="aliyun_pan_qr_failed">扫码登录失败，请重试</string>
+    <string name="aliyun_pan_qr_refresh">刷新二维码</string>
+    <string name="aliyun_pan_qr_save">保存到相册</string>
+    <string name="aliyun_pan_qr_saved">二维码已保存到相册</string>
+    <string name="aliyun_pan_qr_save_failed">二维码保存到相册失败</string>
+    <string name="pref_aliyun_pan_refresh_token">刷新令牌</string>
+    <string name="pref_aliyun_pan_refresh_token_summ">通常可通过上方登录自动获取。也可以手动填入：从阿里云盘网页版获取（开发者工具 → 本地存储 → token → refresh_token），或通过 aliyunpan 命令行工具（aliyunpan login）获取</string>
+    <string name="pref_aliyun_pan_test_connection">测试连接</string>
+    <string name="aliyun_pan_connection_test_success">阿里云盘连接成功</string>
+    <string name="aliyun_pan_connection_test_failed">阿里云盘连接失败</string>
+    <string name="pref_aliyun_pan_purge_sync_data">清除阿里云盘中的同步数据</string>
+    <string name="aliyun_pan_sync_data_purged">同步数据已从阿里云盘清除</string>
+    <string name="aliyun_pan_sync_data_not_found">未能在阿里云盘找到同步的数据</string>
+    <string name="aliyun_pan_sync_data_purge_error">从阿里云盘清除同步的数据失败</string>
+    <string name="aliyun_pan_not_configured">尚未配置阿里云盘</string>
+    <string name="pref_purge_confirmation_aliyun_pan_message">清除同步数据会从阿里云盘删除所有已同步的数据，你确定吗？</string>
     <string name="sync_on_chapter_read">章节阅读后同步</string>
     <string name="sync_on_app_resume">后台转到前台时同步</string>
     <string name="sync_library">同步书架</string>
@@ -678,4 +834,36 @@
     <string name="base_url">基础url</string>
     <string name="pref_include_chapter_url_hash">包含章节URL哈希值</string>
     <string name="pref_include_chapter_url_hash_desc">将章节URL的MD5哈希值的前六个字符添加到章节文件或文件夹名中。</string>
+    <!-- 图源浏览翻页 -->
+    <string name="browse_page_previous">上一页</string>
+    <string name="browse_page_next">下一页</string>
+    <string name="browse_page_jump">跳转到页码</string>
+    <string name="browse_page_hint">页码</string>
+    <string name="browse_page_indicator">第 %1$d 页</string>
+    <string name="browse_page_swipe">侧滑翻页</string>
+
+    <!-- 内置网络代理 -->
+    <string name="pref_category_proxy">网络代理</string>
+    <string name="pref_proxy_summary">HTTP代理 • Clash代理</string>
+    <string name="proxy_http_group">HTTP 代理</string>
+    <string name="proxy_http_enable">启用 HTTP 代理</string>
+    <string name="proxy_http_enable_summary">手动设置 HTTP 代理服务器</string>
+    <string name="proxy_http_host">代理主机</string>
+    <string name="proxy_http_port">代理端口</string>
+    <string name="proxy_clash_group">Clash 代理</string>
+    <string name="proxy_enable">启用Clash代理</string>
+    <string name="proxy_enable_summary">将应用流量通过内置代理转发</string>
+    <string name="proxy_subscription_url">订阅Clash链接</string>
+    <string name="proxy_manual_config">手动配置</string>
+    <string name="proxy_manual_config_summary">Clash YAML 节点列表</string>
+    <string name="proxy_port">代理端口</string>
+    <string name="proxy_test_url">延迟测试地址</string>
+    <string name="proxy_node_selection">选择节点</string>
+    <string name="proxy_no_nodes">暂无可用节点</string>
+    <string name="proxy_test_delay">测延迟</string>
+    <string name="proxy_delay_ms">%1$d 毫秒</string>
+    <string name="proxy_delay_failed">超时</string>
+    <string name="proxy_node_not_selected">未选择</string>
+    <string name="proxy_load_failed">加载节点失败</string>
+    <string name="proxy_refresh_nodes">刷新节点</string>
 </resources>

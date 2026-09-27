@@ -89,4 +89,19 @@ object LocaleHelper {
     fun getDefaultEnabledLanguages(): Set<String> {
         return setOf("all", "en", Locale.getDefault().language)
     }
+
+    // SY -->
+
+    /**
+     * Sorts languages by [order] first (custom drag order), then falls back to [comparator]
+     * for languages not present in [order].
+     */
+    fun sortLanguages(languages: Collection<String>, order: List<String>): List<String> {
+        val orderIndex = order.withIndex().associate { (index, lang) -> lang to index }
+        return languages.sortedWith(
+            compareBy<String> { orderIndex[it] ?: Int.MAX_VALUE }
+                .thenComparator(comparator),
+        )
+    }
+    // SY <--
 }

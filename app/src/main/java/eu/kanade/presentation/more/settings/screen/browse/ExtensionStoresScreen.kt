@@ -47,6 +47,7 @@ class ExtensionStoresScreen(
             onOpenWebsite = { it.contact.website.let(context::openInBrowser) },
             onOpenDiscord = { it.contact.discord?.let(context::openInBrowser) },
             onClickDelete = { screenModel.showDialog(ExtensionStoreDialog.Delete(it)) },
+            onToggleEnabled = { screenModel.toggleStoreEnabled(it) },
             onClickRefresh = { screenModel.refreshRepos() },
             navigateUp = navigator::pop,
         )

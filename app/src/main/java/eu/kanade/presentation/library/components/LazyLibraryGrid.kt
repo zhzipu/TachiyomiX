@@ -2,11 +2,15 @@ package eu.kanade.presentation.library.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import tachiyomi.presentation.core.components.FastScrollLazyVerticalGrid
 import tachiyomi.presentation.core.util.plus
@@ -15,15 +19,24 @@ import tachiyomi.presentation.core.util.plus
 internal fun LazyLibraryGrid(
     modifier: Modifier = Modifier,
     columns: Int,
+    state: LazyGridState,
     contentPadding: PaddingValues,
+    scrollAtStart: Boolean = false,
+    hideScrollbar: Boolean = false,
     content: LazyGridScope.() -> Unit,
 ) {
+    val direction = LocalLayoutDirection.current
     FastScrollLazyVerticalGrid(
         columns = if (columns == 0) GridCells.Adaptive(128.dp) else GridCells.Fixed(columns),
         modifier = modifier,
+        state = state,
         contentPadding = contentPadding + PaddingValues(8.dp),
         verticalArrangement = Arrangement.spacedBy(CommonMangaItemDefaults.GridVerticalSpacer),
         horizontalArrangement = Arrangement.spacedBy(CommonMangaItemDefaults.GridHorizontalSpacer),
+        scrollAtStart = scrollAtStart,
+        startContentPadding = (contentPadding + PaddingValues(8.dp)).calculateStartPadding(direction),
+        endContentPadding = (contentPadding + PaddingValues(8.dp)).calculateEndPadding(direction),
+        hideScrollbar = hideScrollbar,
         content = content,
     )
 }

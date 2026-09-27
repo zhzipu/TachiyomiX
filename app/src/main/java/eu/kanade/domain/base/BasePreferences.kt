@@ -31,6 +31,9 @@ class BasePreferences(
         PACKAGEINSTALLER(MR.strings.ext_installer_packageinstaller, true),
         SHIZUKU(MR.strings.ext_installer_shizuku, false),
         PRIVATE(MR.strings.ext_installer_private, false),
+        // SY --> 交给外部安装器 InstallerX Revived（com.rosan.installer.x.revived）处理
+        INSTALLERX(MR.strings.ext_installer_installerx, false),
+        // SY <--
     }
 
     val displayProfile: Preference<String> = preferenceStore.getString("pref_display_profile_key", "")

@@ -3,6 +3,7 @@ package eu.kanade.presentation.updates
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.FilterList
@@ -15,6 +16,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,9 +71,13 @@ fun UpdateScreen(
         onSelectAll(false)
     }
 
+    // 点击顶部"更新"标题时递增，通知列表回到顶部
+    var scrollToTopNonce by remember { mutableStateOf(0) }
+
     Scaffold(
         topBar = { scrollBehavior ->
             UpdatesAppBar(
+                onClickTitle = { scrollToTopNonce++ },
                 onCalendarClicked = { onCalendarClicked() },
                 onUpdateLibrary = { onUpdateLibrary() },
                 onFilterClicked = { onFilterClicked() },
@@ -103,6 +109,13 @@ fun UpdateScreen(
             else -> {
                 val scope = rememberCoroutineScope()
                 var isRefreshing by remember { mutableStateOf(false) }
+                // 点击顶部"更新"标题时，列表带动画回到顶部
+                val listState = rememberLazyListState()
+                LaunchedEffect(scrollToTopNonce) {
+                    if (scrollToTopNonce > 0) {
+                        listState.animateScrollToItem(0)
+                    }
+                }
 
                 PullRefresh(
                     refreshing = isRefreshing,
@@ -120,6 +133,7 @@ fun UpdateScreen(
                     indicatorPadding = contentPadding,
                 ) {
                     FastScrollLazyColumn(
+                        state = listState,
                         contentPadding = contentPadding,
                     ) {
                         updatesLastUpdatedItem(lastUpdated)
@@ -144,6 +158,7 @@ fun UpdateScreen(
 
 @Composable
 private fun UpdatesAppBar(
+    onClickTitle: () -> Unit,
     onCalendarClicked: () -> Unit,
     onUpdateLibrary: () -> Unit,
     onFilterClicked: () -> Unit,
@@ -159,6 +174,7 @@ private fun UpdatesAppBar(
     AppBar(
         modifier = modifier,
         title = stringResource(MR.strings.label_recent_updates),
+        onClickTitle = onClickTitle,
         actions = {
             AppBarActions(
                 listOf(

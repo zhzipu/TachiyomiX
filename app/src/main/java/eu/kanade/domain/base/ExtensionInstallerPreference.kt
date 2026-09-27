@@ -3,6 +3,7 @@ package eu.kanade.domain.base
 import android.content.Context
 import eu.kanade.domain.base.BasePreferences.ExtensionInstaller
 import eu.kanade.tachiyomi.util.system.hasMiuiPackageInstaller
+import eu.kanade.tachiyomi.util.system.isInstallerXInstalled
 import eu.kanade.tachiyomi.util.system.isShizukuInstalled
 import kotlinx.coroutines.CoroutineScope
 import tachiyomi.core.common.preference.Preference
@@ -40,6 +41,11 @@ class ExtensionInstallerPreference(
             ExtensionInstaller.SHIZUKU -> {
                 if (!context.isShizukuInstalled) return defaultValue()
             }
+            // SY --> InstallerX Revived 被卸载后回落到默认安装器
+            ExtensionInstaller.INSTALLERX -> {
+                if (!context.isInstallerXInstalled) return defaultValue()
+            }
+            // SY <--
             else -> {}
         }
         return value

@@ -57,6 +57,11 @@ fun MangaChapterListItem(
     read: Boolean,
     bookmark: Boolean,
     selected: Boolean,
+    /**
+     * 这一话在服务器上**没有内容**（网络图源里「未上传」的章节）。
+     * 整行跟着 [read] 一起淡显 —— 它没有数据，看着就不该像能点开的样子。
+     */
+    unavailable: Boolean = false,
     downloadIndicatorEnabled: Boolean,
     downloadStateProvider: () -> Download.State,
     downloadProgressProvider: () -> Int,
@@ -135,15 +140,20 @@ fun MangaChapterListItem(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         onTextLayout = { textHeight = it.size.height },
-                        color = LocalContentColor.current.copy(alpha = if (read) DISABLED_ALPHA else 1f),
+                        // SY --> 「未上传」的章节一并淡显
+                        color = LocalContentColor.current
+                            .copy(alpha = if (read || unavailable) DISABLED_ALPHA else 1f),
+                        // SY <--
                     )
                 }
 
                 Row {
                     val subtitleStyle = MaterialTheme.typography.bodySmall
                         .merge(
+                            // SY --> 「未上传」的章节一并淡显
                             color = LocalContentColor.current
-                                .copy(alpha = if (read) DISABLED_ALPHA else SECONDARY_ALPHA),
+                                .copy(alpha = if (read || unavailable) DISABLED_ALPHA else SECONDARY_ALPHA),
+                            // SY <--
                         )
                     ProvideTextStyle(value = subtitleStyle) {
                         if (date != null) {

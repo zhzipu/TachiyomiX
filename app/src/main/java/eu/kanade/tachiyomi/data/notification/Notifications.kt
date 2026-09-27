@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.util.system.buildNotificationChannel
 import eu.kanade.tachiyomi.util.system.buildNotificationChannelGroup
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.sy.SYMR
 
 /**
  * Class to manage the basic information of all the notifications used in the app.
@@ -49,6 +50,15 @@ object Notifications {
     const val CHANNEL_NEW_CHAPTERS = "new_chapters_channel"
     const val ID_NEW_CHAPTERS = -301
     const val GROUP_NEW_CHAPTERS = "eu.kanade.tachiyomi.NEW_CHAPTERS"
+
+    /**
+     * Notification channel and ids used by the network source uploader.
+     */
+    private const val GROUP_UPLOADER = "group_uploader"
+    const val CHANNEL_UPLOADER_PROGRESS = "uploader_progress_channel"
+    const val ID_UPLOAD_PROGRESS = -601
+    const val CHANNEL_UPLOADER_ERROR = "uploader_error_channel"
+    const val ID_UPLOAD_ERROR = -602
 
     /**
      * Notification channel and ids used by the backup/restore system.
@@ -117,6 +127,9 @@ object Notifications {
                 buildNotificationChannelGroup(GROUP_APK_UPDATES) {
                     setName(context.stringResource(MR.strings.label_recent_updates))
                 },
+                buildNotificationChannelGroup(GROUP_UPLOADER) {
+                    setName(context.stringResource(SYMR.strings.upload_channel_group))
+                },
             ),
         )
 
@@ -174,6 +187,17 @@ object Notifications {
                 buildNotificationChannel(CHANNEL_LIBRARY_EHENTAI, IMPORTANCE_LOW) {
                     setName("EHentai")
                     setGroup(GROUP_LIBRARY)
+                    setShowBadge(false)
+                },
+                // 上传（网络图源）：进度 + 结果，跟下载器的两条一一对应
+                buildNotificationChannel(CHANNEL_UPLOADER_PROGRESS, IMPORTANCE_LOW) {
+                    setName(context.stringResource(MR.strings.channel_progress))
+                    setGroup(GROUP_UPLOADER)
+                    setShowBadge(false)
+                },
+                buildNotificationChannel(CHANNEL_UPLOADER_ERROR, IMPORTANCE_LOW) {
+                    setName(context.stringResource(MR.strings.channel_errors))
+                    setGroup(GROUP_UPLOADER)
                     setShowBadge(false)
                 },
                 // SY <--

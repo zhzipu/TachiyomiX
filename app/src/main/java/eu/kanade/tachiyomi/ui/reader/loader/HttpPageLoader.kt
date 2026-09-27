@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.loader
 
+import android.app.Application
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.database.models.toDomainChapter
@@ -8,6 +9,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import eu.kanade.tachiyomi.util.waifu2x.ReaderEnhancement
 import exh.source.isEhBasedSource
 import exh.util.DataSaver
 import exh.util.DataSaver.Companion.getImage
@@ -25,6 +27,8 @@ import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withIOContext
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import uy.kohesive.injekt.injectLazy
+import java.io.InputStream
 import java.util.concurrent.PriorityBlockingQueue
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -46,6 +50,8 @@ internal class HttpPageLoader(
 ) : PageLoader() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val context: Application by injectLazy()
 
     /**
      * A queue used to manage requests one by one while allowing priorities.
@@ -228,7 +234,20 @@ internal class HttpPageLoader(
                 chapterCache.putImageToCache(imageUrl, imageResponse)
             }
 
-            page.stream = { chapterCache.getImageFile(imageUrl).inputStream() }
+            // 原始（未放大）数据流，供图像增强使用
+            val streamSource: () -> InputStream = { chapterCache.getImageFile(imageUrl).inputStream() }
+            page.enhancementStream = streamSource
+
+            // 图像增强：已生成原生放大结果时直接使用放大后的图片，否则保留原图并排队预增强
+            val enhancedFile = ReaderEnhancement.cachedFile(context, page)
+            if (enhancedFile != null) {
+                page.stream = { enhancedFile.inputStream() }
+                page.usingEnhancedStream = true
+            } else {
+                page.stream = streamSource
+                page.usingEnhancedStream = false
+                ReaderEnhancement.request(context, page)
+            }
             page.status = Page.State.Ready
         } catch (e: Throwable) {
             page.status = Page.State.Error(e)
@@ -243,6 +262,19 @@ internal class HttpPageLoader(
         if (page.status == Page.State.Queue) {
             scope.launchIO {
                 loadPage(page)
+            }
+        }
+    }
+
+    /**
+     * 把本章所有尚未加载的页面一次性加入加载队列（供「本章节」整章增强使用）。
+     * 页面加载完成后会自动排队做图像增强，因此无需在这里直接入队增强。
+     */
+    fun loadWholeChapter() {
+        val pages = chapter.pages ?: return
+        pages.forEach { page ->
+            if (page.status == Page.State.Queue) {
+                queue.offer(PriorityPage(page, PriorityPage.ADJACENT))
             }
         }
     }

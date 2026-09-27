@@ -29,7 +29,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -95,7 +98,17 @@ fun ReaderAppBars(
     onClickChapterList: () -> Unit,
     onClickPageLayout: () -> Unit,
     onClickShiftPage: () -> Unit,
+    onLongClickShiftPage: (() -> Unit)? = null,
+    onClickImageEnhancement: () -> Unit,
+    imageEnhancementEnabled: Boolean,
+    enhancementAvailable: Boolean,
+    onClickEnhancementSettings: () -> Unit,
+    spatialSceneActive: Boolean,
+    spatialSceneBusy: Boolean,
+    onClickSpatialScene: () -> Unit,
     // SY <--
+    /** 底部区域（章节导航 + 底栏）的实际高度，供左下角状态指示器避让。 */
+    onBottomSectionHeightChanged: (Dp) -> Unit = {},
 ) {
     val backgroundColor = MaterialTheme.colorScheme
         .surfaceColorAtElevation(3.dp)
@@ -150,7 +163,10 @@ fun ReaderAppBars(
             CompositionLocalProvider(
                 LocalLayoutDirection provides if (sliderOnLeft) LayoutDirection.Ltr else LayoutDirection.Rtl,
             ) {
-                Row(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     AnimatedVisibility(
                         visible = visible,
                         enter = slideInHorizontally(readerBarsSlideAnimationSpec) { if (sliderOnLeft) -it else it } +
@@ -161,7 +177,8 @@ fun ReaderAppBars(
                         Row {
                             Spacer(modifier = Modifier.width(MaterialTheme.padding.small))
                             Box(
-                                modifier = Modifier.fillMaxHeight(),
+                                // 竖直章节导航的高度，由「垂直导航栏高度」设置决定（65%~100%）
+                                modifier = Modifier.fillMaxHeight(verticalNavigatorHeight),
                                 contentAlignment = Alignment.BottomCenter,
                             ) {
                                 ChapterNavigator(
@@ -193,7 +210,13 @@ fun ReaderAppBars(
             enter = slideInVertically(readerBarsSlideAnimationSpec) { it } + fadeIn(readerBarsFadeAnimationSpec),
             exit = slideOutVertically(readerBarsSlideAnimationSpec) { it } + fadeOut(readerBarsFadeAnimationSpec),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small)) {
+            val density = LocalDensity.current
+            Column(
+                modifier = Modifier.onSizeChanged {
+                    onBottomSectionHeightChanged(with(density) { it.height.toDp() })
+                },
+                verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+            ) {
                 if (chapterNavigatorType.isHorizontal()) {
                     ChapterNavigator(
                         type = chapterNavigatorType,
@@ -234,6 +257,14 @@ fun ReaderAppBars(
                     onClickShare = onShare,
                     onClickPageLayout = onClickPageLayout,
                     onClickShiftPage = onClickShiftPage,
+                    onLongClickShiftPage = onLongClickShiftPage,
+                    onClickImageEnhancement = onClickImageEnhancement,
+                    imageEnhancementEnabled = imageEnhancementEnabled,
+                    enhancementAvailable = enhancementAvailable,
+                    onClickEnhancementSettings = onClickEnhancementSettings,
+                    spatialSceneActive = spatialSceneActive,
+                    spatialSceneBusy = spatialSceneBusy,
+                    onClickSpatialScene = onClickSpatialScene,
                     // SY <--
                 )
             }

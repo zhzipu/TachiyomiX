@@ -271,6 +271,20 @@ object SettingsLibraryScreen : SearchableSettings {
                     ),
                     title = stringResource(MR.strings.pref_mark_duplicate_read_chapter_read),
                 ),
+                // SY -->
+                Preference.PreferenceItem.ListPreference(
+                    preference = libraryPreferences.indexBarPosition,
+                    entries = mapOf(
+                        LibraryPreferences.IndexBarPosition.RIGHT to
+                            stringResource(MR.strings.index_bar_right),
+                        LibraryPreferences.IndexBarPosition.LEFT to
+                            stringResource(MR.strings.index_bar_left),
+                        LibraryPreferences.IndexBarPosition.OFF to
+                            stringResource(MR.strings.disabled),
+                    ),
+                    title = stringResource(MR.strings.index_bar_position),
+                ),
+                // SY <--
             ),
         )
     }

@@ -83,7 +83,7 @@ fun Modifier.drawHorizontalScrollbar(
     reverseScrolling: Boolean = false,
     // The amount of offset the scrollbar position towards the top of the layout
     positionOffsetPx: Float = 0f,
-): Modifier = drawScrollbar(state, Orientation.Horizontal, reverseScrolling, positionOffsetPx)
+): Modifier = drawScrollbar(state, Orientation.Horizontal, reverseScrolling, positionOffsetPx, scrollAtStart = false, hideScrollbar = false)
 
 /**
  * Draws vertical scrollbar to a LazyList.
@@ -96,7 +96,9 @@ fun Modifier.drawVerticalScrollbar(
     reverseScrolling: Boolean = false,
     // The amount of offset the scrollbar position towards the start of the layout
     positionOffsetPx: Float = 0f,
-): Modifier = drawScrollbar(state, Orientation.Vertical, reverseScrolling, positionOffsetPx)
+    scrollAtStart: Boolean = false,
+    hideScrollbar: Boolean = false,
+): Modifier = drawScrollbar(state, Orientation.Vertical, reverseScrolling, positionOffsetPx, scrollAtStart, hideScrollbar)
 
 @Composable
 private fun Modifier.drawScrollbar(
@@ -104,9 +106,13 @@ private fun Modifier.drawScrollbar(
     orientation: Orientation,
     reverseScrolling: Boolean,
     positionOffset: Float,
+    scrollAtStart: Boolean,
+    hideScrollbar: Boolean,
 ): Modifier = drawScrollbar(
     orientation,
     reverseScrolling,
+    scrollAtStart,
+    hideScrollbar,
 ) { reverseDirection, atEnd, thickness, color, alpha ->
     val layoutInfo = state.layoutInfo
     val viewportSize = if (orientation == Orientation.Horizontal) {
@@ -187,6 +193,8 @@ private fun ContentDrawScope.onDrawScrollbar(
 private fun Modifier.drawScrollbar(
     orientation: Orientation,
     reverseScrolling: Boolean,
+    scrollAtStart: Boolean,
+    hideScrollbar: Boolean,
     onDraw: ContentDrawScope.(
         reverseDirection: Boolean,
         atEnd: Boolean,
@@ -216,13 +224,22 @@ private fun Modifier.drawScrollbar(
     }
 
     val alpha = remember { Animatable(0f) }
+    LaunchedEffect(hideScrollbar) {
+        if (hideScrollbar) {
+            alpha.snapTo(0f)
+        }
+    }
     LaunchedEffect(scrolled, alpha) {
         scrolled
             .sample(0.1.seconds)
             .collectLatest {
-                alpha.snapTo(1f)
-                delay(ScrollBarVisibilityDurationMillis.milliseconds)
-                alpha.animateTo(0f, animationSpec = ImmediateFadeOutAnimationSpec)
+                if (hideScrollbar) {
+                    alpha.snapTo(0f)
+                } else {
+                    alpha.snapTo(1f)
+                    delay(ScrollBarVisibilityDurationMillis.milliseconds)
+                    alpha.animateTo(0f, animationSpec = ImmediateFadeOutAnimationSpec)
+                }
             }
     }
 
@@ -232,7 +249,11 @@ private fun Modifier.drawScrollbar(
     } else {
         reverseScrolling
     }
-    val atEnd = if (orientation == Orientation.Vertical) isLtr else true
+    val atEnd = if (orientation == Orientation.Vertical) {
+        isLtr && !scrollAtStart
+    } else {
+        true
+    }
 
     val context = LocalContext.current
     val thickness = remember { ViewConfiguration.get(context).scaledScrollBarSize.toFloat() }

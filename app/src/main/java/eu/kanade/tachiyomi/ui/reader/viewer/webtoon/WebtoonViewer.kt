@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
+import eu.kanade.tachiyomi.util.waifu2x.ReaderEnhancement
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import tachiyomi.core.common.util.system.logcat
@@ -132,6 +133,7 @@ class WebtoonViewer(
                 NavigationRegion.MENU -> activity.toggleMenu()
                 NavigationRegion.NEXT, NavigationRegion.RIGHT -> scrollDown()
                 NavigationRegion.PREV, NavigationRegion.LEFT -> scrollUp()
+                NavigationRegion.NONE -> {}
             }
         }
         recycler.longTapListener = f@{ event ->
@@ -217,6 +219,9 @@ class WebtoonViewer(
         val pages = page.chapter.pages ?: return
         logcat { "onPageSelected: ${page.number}/${pages.size}" }
         activity.onPageSelected(page)
+
+        // 图像增强：当前可见页按高优先级排队处理
+        ReaderEnhancement.request(activity.applicationContext, page, highPriority = true)
 
         // Preload next chapter once we're within the last 5 pages of the current chapter
         val inPreloadRange = pages.size - page.number < 5

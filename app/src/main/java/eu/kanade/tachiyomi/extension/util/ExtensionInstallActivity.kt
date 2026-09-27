@@ -31,7 +31,15 @@ class ExtensionInstallActivity : Activity() {
             .putExtra(Intent.EXTRA_RETURN_RESULT, true)
             .setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-        if (hasMiuiPackageInstaller) {
+        // SY --> 指定了安装器（如 InstallerX Revived）时就只把意图发给它，不再让系统弹选择框
+        val targetPackage = intent.getStringExtra(ExtensionInstaller.EXTRA_TARGET_PACKAGE)
+        if (targetPackage != null) {
+            installIntent.setPackage(targetPackage)
+        }
+        // SY <--
+
+        // MIUI 安装器的结果回调 bug 只针对系统安装器，第三方安装器不需要这套规避逻辑
+        if (hasMiuiPackageInstaller && targetPackage == null) {
             ignoreResult = true
             ignoreUntil = System.nanoTime() + 1.seconds.inWholeNanoseconds
         }
@@ -42,6 +50,10 @@ class ExtensionInstallActivity : Activity() {
             // Either install package can't be found (probably bots) or there's a security exception
             // with the download manager. Nothing we can workaround.
             toast(error.message)
+            // SY --> 起不来时把状态归位并关掉自己，否则插件会一直停在“安装中”
+            checkInstallationResult(RESULT_CANCELED)
+            finish()
+            // SY <--
         }
     }
 

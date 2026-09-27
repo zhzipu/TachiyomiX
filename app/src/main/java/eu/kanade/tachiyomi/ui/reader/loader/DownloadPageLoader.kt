@@ -10,9 +10,12 @@ import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import eu.kanade.tachiyomi.util.waifu2x.ReaderEnhancement
 import mihon.core.common.archive.archiveReader
 import tachiyomi.domain.manga.model.Manga
 import uy.kohesive.injekt.injectLazy
+import java.io.InputStream
 
 /**
  * Loader used to load a chapter from the downloaded chapters.
@@ -26,6 +29,8 @@ internal class DownloadPageLoader(
 ) : PageLoader() {
 
     private val context: Application by injectLazy()
+
+    private val readerPreferences: ReaderPreferences by injectLazy()
 
     private var archivePageLoader: ArchivePageLoader? = null
 
@@ -70,5 +75,19 @@ internal class DownloadPageLoader(
 
     override suspend fun loadPage(page: ReaderPage) {
         archivePageLoader?.loadPage(page)
+
+        // 图像增强：已生成原生放大结果时改用放大后的图片，否则排队预增强
+        if (ReaderEnhancement.isEnabled(readerPreferences)) {
+            val enhancedFile = ReaderEnhancement.cachedFile(context, page, readerPreferences)
+            if (enhancedFile != null) {
+                val streamSource: () -> InputStream = page.stream ?: return
+                page.enhancementStream = streamSource
+                page.stream = { enhancedFile.inputStream() }
+                page.usingEnhancedStream = true
+            } else {
+                page.usingEnhancedStream = false
+                ReaderEnhancement.request(context, page, preferences = readerPreferences)
+            }
+        }
     }
 }

@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.library.components.CommonMangaItemDefaults
@@ -29,12 +30,14 @@ fun GlobalSearchCardRow(
     getManga: @Composable (Manga) -> State<Manga>,
     onClick: (Manga) -> Unit,
     onLongClick: (Manga) -> Unit,
+    selection: List<Manga> = emptyList(),
 ) {
     if (titles.isEmpty()) {
         EmptyResultItem()
         return
     }
 
+    val selectedIds = remember(selection) { selection.mapTo(mutableSetOf()) { it.id } }
     LazyRow(
         contentPadding = PaddingValues(MaterialTheme.padding.small),
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
@@ -45,6 +48,7 @@ fun GlobalSearchCardRow(
                 title = title.title,
                 cover = title.asMangaCover(),
                 isFavorite = title.favorite,
+                isSelected = title.id in selectedIds,
                 onClick = { onClick(title) },
                 onLongClick = { onLongClick(title) },
             )
@@ -57,6 +61,7 @@ private fun MangaItem(
     title: String,
     cover: MangaCover,
     isFavorite: Boolean,
+    isSelected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -64,6 +69,7 @@ private fun MangaItem(
         MangaComfortableGridItem(
             title = title,
             titleMaxLines = 3,
+            isSelected = isSelected,
             coverData = cover,
             coverBadgeStart = {
                 InLibraryBadge(enabled = isFavorite)

@@ -46,3 +46,7 @@ include(":presentation-core")
 include(":presentation-widget")
 include(":source-api")
 include(":source-local")
+// SY -->
+include(":source-network")
+// SY <--
+include(":model-packs")

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -23,6 +24,7 @@ import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
+import eu.kanade.tachiyomi.ui.more.UploadQueueState
 import tachiyomi.core.common.Constants
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
@@ -34,6 +36,9 @@ import tachiyomi.presentation.core.i18n.stringResource
 @Composable
 fun MoreScreen(
     downloadQueueStateProvider: () -> DownloadQueueState,
+    // SY -->
+    uploadQueueStateProvider: () -> UploadQueueState,
+    // SY <--
     downloadedOnly: Boolean,
     onDownloadedOnlyChange: (Boolean) -> Unit,
     incognitoMode: Boolean,
@@ -43,14 +48,17 @@ fun MoreScreen(
     showNavHistory: Boolean,
     // SY <--
     onClickDownloadQueue: () -> Unit,
+    // SY -->
+    onClickUploadQueue: () -> Unit,
+    // SY <--
     onClickCategories: () -> Unit,
     onClickStats: () -> Unit,
     onClickDataAndStorage: () -> Unit,
     onClickSettings: () -> Unit,
-    onClickAbout: () -> Unit,
     onClickBatchAdd: () -> Unit,
     onClickUpdates: () -> Unit,
     onClickHistory: () -> Unit,
+    onClickAbout: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
 
@@ -58,9 +66,6 @@ fun MoreScreen(
         ScrollbarLazyColumn(
             modifier = Modifier.padding(contentPadding),
         ) {
-            item {
-                LogoHeader()
-            }
             item {
                 SwitchPreferenceWidget(
                     title = stringResource(MR.strings.label_downloaded_only),
@@ -132,6 +137,37 @@ fun MoreScreen(
                     onPreferenceClick = onClickDownloadQueue,
                 )
             }
+            // SY -->
+            item {
+                val uploadQueueState = uploadQueueStateProvider()
+                TextPreferenceWidget(
+                    title = stringResource(SYMR.strings.label_upload_queue),
+                    // 副标题的三种形态比下载那边简单：上传没有「暂停后取消」这类独立状态，
+                    // 只有「在跑」和「暂停」两种，且计数单位是「本」而不是「话」。
+                    subtitle = when (uploadQueueState) {
+                        UploadQueueState.Stopped -> null
+                        is UploadQueueState.Paused -> {
+                            val pending = uploadQueueState.pending
+                            if (pending == 0) {
+                                stringResource(MR.strings.paused)
+                            } else {
+                                stringResource(SYMR.strings.upload_queue_summary_paused, pending)
+                            }
+                        }
+                        is UploadQueueState.Uploading -> {
+                            val pending = uploadQueueState.pending
+                            if (pending == 0) {
+                                stringResource(SYMR.strings.upload_queue_summary_idle)
+                            } else {
+                                stringResource(SYMR.strings.upload_queue_summary_running, pending)
+                            }
+                        }
+                    },
+                    icon = Icons.Outlined.Upload,
+                    onPreferenceClick = onClickUploadQueue,
+                )
+            }
+            // SY <--
             item {
                 TextPreferenceWidget(
                     title = stringResource(MR.strings.categories),
@@ -174,16 +210,16 @@ fun MoreScreen(
             }
             item {
                 TextPreferenceWidget(
-                    title = stringResource(MR.strings.pref_category_about),
-                    icon = Icons.Outlined.Info,
-                    onPreferenceClick = onClickAbout,
+                    title = stringResource(MR.strings.label_help),
+                    icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                    onPreferenceClick = { uriHandler.openUri(Constants.URL_HELP) },
                 )
             }
             item {
                 TextPreferenceWidget(
-                    title = stringResource(MR.strings.label_help),
-                    icon = Icons.AutoMirrored.Outlined.HelpOutline,
-                    onPreferenceClick = { uriHandler.openUri(Constants.URL_HELP) },
+                    title = stringResource(MR.strings.pref_category_about),
+                    icon = Icons.Outlined.Info,
+                    onPreferenceClick = onClickAbout,
                 )
             }
         }

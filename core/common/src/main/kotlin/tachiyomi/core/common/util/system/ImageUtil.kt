@@ -154,6 +154,16 @@ object ImageUtil {
         return output
     }
 
+    /**
+     * 把位图等比缩放到指定高度，用于双页合并前统一两侧高度。
+     * 高度已等于目标值时原样返回。
+     */
+    fun normalizeToHeight(imageBitmap: Bitmap, targetHeight: Int): Bitmap {
+        if (imageBitmap.height == targetHeight) return imageBitmap
+        val newWidth = (imageBitmap.width.toFloat() * targetHeight / imageBitmap.height).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(imageBitmap, newWidth, targetHeight, true)
+    }
+
     fun rotateImage(imageSource: BufferedSource, degrees: Float): BufferedSource {
         val imageBitmap = BitmapFactory.decodeStream(imageSource.inputStream())
         val rotated = rotateBitMap(imageBitmap, degrees)
@@ -767,14 +777,20 @@ object ImageUtil {
         @ColorInt background: Int = Color.WHITE,
         progressCallback: ((Int) -> Unit)? = null,
     ): BufferedSource {
-        val height = imageBitmap.height
-        val width = imageBitmap.width
-        val height2 = imageBitmap2.height
-        val width2 = imageBitmap2.width
+        // SY -->
+        val maxHeight = max(imageBitmap.height, imageBitmap2.height)
 
-        val maxHeight = max(height, height2)
+        // 双页并排前先统一两页高度（以较高页为基准）：否则宽高比不同的两页按原始分辨率
+        // 拼图后再整体 FIT 缩放，会出现高的一页撑满高度、矮的一页被压缩并留上下黑边，左右明显不等大。
+        val bitmap1 = ImageUtil.normalizeToHeight(imageBitmap, maxHeight)
+        val bitmap2 = ImageUtil.normalizeToHeight(imageBitmap2, maxHeight)
+        val width = bitmap1.width
+        val width2 = bitmap2.width
+        val height = bitmap1.height
+        val height2 = bitmap2.height
+        // SY <--
 
-        val result = Bitmap.createBitmap(width + width2 + centerMargin, max(height, height2), Bitmap.Config.ARGB_8888)
+        val result = Bitmap.createBitmap(width + width2 + centerMargin, maxHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(result)
         canvas.drawColor(background)
         val upperPart = Rect(
@@ -784,7 +800,7 @@ object ImageUtil {
             height + (maxHeight - height) / 2,
         )
 
-        canvas.drawBitmap(imageBitmap, imageBitmap.rect, upperPart, null)
+        canvas.drawBitmap(bitmap1, bitmap1.rect, upperPart, null)
         progressCallback?.invoke(98)
         val bottomPart = Rect(
             if (!isLTR) 0 else width + centerMargin,
@@ -793,7 +809,7 @@ object ImageUtil {
             height2 + (maxHeight - height2) / 2,
         )
 
-        canvas.drawBitmap(imageBitmap2, imageBitmap2.rect, bottomPart, null)
+        canvas.drawBitmap(bitmap2, bitmap2.rect, bottomPart, null)
         progressCallback?.invoke(99)
 
         val output = Buffer()

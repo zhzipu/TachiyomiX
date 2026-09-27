@@ -25,3 +25,10 @@ VALUES (:mangaId, :categoryId);
 deleteMangaCategoryByMangaId:
 DELETE FROM mangas_categories
 WHERE manga_id = :mangaId;
+
+-- 「下载」分类的成员清单。备份/同步要把这些漫画整本排除掉（见 BackupCreator），
+-- 所以要能一次性按分类 id 反查成员，而不是逐本漫画去查分类。
+getMangaIdsByCategoryId:
+SELECT manga_id
+FROM mangas_categories
+WHERE category_id = :categoryId;

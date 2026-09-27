@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.RemoveDone
+import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +47,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
@@ -187,6 +189,10 @@ private fun RowScope.Button(
     toConfirm: Boolean,
     onLongClick: () -> Unit,
     onClick: () -> Unit,
+    // SY -->
+    // 置灰的按钮：仍然占位、仍然显示图标，但不响应点击，也不参与「长按展开文字」
+    enabled: Boolean = true,
+    // SY <--
     content: (@Composable () -> Unit)? = null,
 ) {
     val animatedWeight by animateFloatAsState(
@@ -200,12 +206,14 @@ private fun RowScope.Button(
             .combinedClickable(
                 interactionSource = null,
                 indication = ripple(bounded = false),
+                enabled = enabled,
                 onLongClick = onLongClick,
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
     ) {
         Column(
+            modifier = Modifier.alpha(if (enabled) 1f else BottomBarDisabledAlpha),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -237,6 +245,13 @@ fun LibraryBottomActionMenu(
     onMarkAsReadClicked: () -> Unit,
     onMarkAsUnreadClicked: () -> Unit,
     onDownloadClicked: ((DownloadAction) -> Unit)?,
+    // SY -->
+    // 「下载」分类里这个位置换成「上传」：把所选漫画已下载的章节传到网络图源的 WebDAV 库。
+    // 两者互斥，由调用方（`LibraryTab`）按当前分类决定传哪一个进来。
+    onUploadClicked: (() -> Unit)?,
+    // 上传按钮是否可用（网络图源没配置服务器信息时置灰）
+    uploadEnabled: Boolean = true,
+    // SY <--
     onDeleteClicked: () -> Unit,
     onMigrateClicked: (() -> Unit)?,
     // SY -->
@@ -295,6 +310,9 @@ fun LibraryBottomActionMenu(
                     onLongClick = { onLongClickItem(0) },
                     onClick = onChangeCategoryClicked,
                 )
+                // SY -->
+                // 同一个位置只放一个按钮：普通分类是「下载」下拉菜单，书架「下载」分类是「上传」。
+                // 两者都用 confirm[3] 这个槽位，长按展开文字行为保持一致。
                 if (onDownloadClicked != null) {
                     var downloadExpanded by remember { mutableStateOf(false) }
                     Button(
@@ -311,7 +329,21 @@ fun LibraryBottomActionMenu(
                             offset = BottomBarMenuDpOffset,
                         )
                     }
+                } else if (onUploadClicked != null) {
+                    Button(
+                        // 「拖入队列」是文案上的名字 —— 点它**不会立刻开始上传**，
+                        // 而是把所选漫画已下载的章节按话排进上传队列，
+                        // 用户在「更多 → 上传队列」里能看到、能取消、能重排。
+                        title = stringResource(SYMR.strings.action_add_to_upload_queue),
+                        icon = Icons.Outlined.Upload,
+                        toConfirm = confirm[3],
+                        onLongClick = { onLongClickItem(3) },
+                        onClick = onUploadClicked,
+                        // 网络图源没配置服务器信息时置灰，点了也没有意义
+                        enabled = uploadEnabled,
+                    )
                 }
+                // SY <--
                 Button(
                     title = stringResource(MR.strings.action_delete),
                     icon = Icons.Outlined.Delete,
@@ -401,3 +433,6 @@ fun LibraryBottomActionMenu(
 }
 
 private val BottomBarMenuDpOffset = DpOffset(0.dp, 0.dp)
+
+/** 底栏按钮「不可用」时的整体透明度，与 Material3 的禁用态一致。 */
+private const val BottomBarDisabledAlpha = 0.38f

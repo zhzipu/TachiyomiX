@@ -1,25 +1,13 @@
 package eu.kanade.presentation.more.settings.screen.about
 
 import android.content.Context
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Public
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
@@ -29,31 +17,23 @@ import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.BuildConfig
-import eu.kanade.tachiyomi.data.updater.AppUpdateChecker
+import eu.kanade.tachiyomi.data.updater.GITHUB_REPO
 import eu.kanade.tachiyomi.ui.more.NewUpdateScreen
+import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import eu.kanade.tachiyomi.util.CrashLogUtil
 import eu.kanade.tachiyomi.util.lang.toDateTimestampString
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import eu.kanade.tachiyomi.util.system.isPreviewBuildType
+import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toast
 import exh.syDebugVersion
 import kotlinx.coroutines.launch
-import logcat.LogPriority
-import tachiyomi.core.common.util.lang.withIOContext
-import tachiyomi.core.common.util.lang.withUIContext
-import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.release.interactor.GetApplicationRelease
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.LinkIcon
+import tachiyomi.i18n.sy.SYMR
 import tachiyomi.presentation.core.components.ScrollbarLazyColumn
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.icons.CustomIcons
-import tachiyomi.presentation.core.icons.Discord
-import tachiyomi.presentation.core.icons.Facebook
-import tachiyomi.presentation.core.icons.Github
-import tachiyomi.presentation.core.icons.Reddit
-import tachiyomi.presentation.core.icons.X
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.time.Instant
@@ -64,16 +44,13 @@ object AboutScreen : Screen() {
 
     @Composable
     override fun Content() {
-        val scope = rememberCoroutineScope()
         val context = LocalContext.current
-        val uriHandler = LocalUriHandler.current
         val handleBack = LocalBackPress.current
         val navigator = LocalNavigator.currentOrThrow
-        var isCheckingUpdates by remember { mutableStateOf(false) }
-
-        // SY -->
-        var showWhatsNewDialog by remember { mutableStateOf(false) }
-        // SY <--
+        var logoTapCount by remember { mutableStateOf(0) }
+        val scope = rememberCoroutineScope()
+        val latestVersionMsg = stringResource(SYMR.strings.about_update_latest)
+        val checkFailedMsg = stringResource(SYMR.strings.about_update_check_failed)
 
         Scaffold(
             topBar = { scrollBehavior ->
@@ -88,7 +65,20 @@ object AboutScreen : Screen() {
                 contentPadding = contentPadding,
             ) {
                 item {
-                    LogoHeader()
+                    LogoHeader(
+                        onClick = {
+                            logoTapCount++
+                            when (logoTapCount) {
+                                1 -> context.toast(SYMR.strings.about_logo_tap_1)
+                                2 -> context.toast(SYMR.strings.about_logo_tap_2)
+                                3 -> context.toast(SYMR.strings.about_logo_tap_3)
+                                else -> {
+                                    logoTapCount = 0
+                                    navigator.push(WebViewScreen(EASTER_EGG_URL))
+                                }
+                            }
+                        },
+                    )
                 }
 
                 item {
@@ -102,155 +92,53 @@ object AboutScreen : Screen() {
                     )
                 }
 
-                if (BuildConfig.INCLUDE_UPDATER) {
-                    item {
-                        TextPreferenceWidget(
-                            title = stringResource(MR.strings.check_for_updates),
-                            widget = {
-                                AnimatedVisibility(visible = isCheckingUpdates) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(28.dp),
-                                        strokeWidth = 3.dp,
-                                    )
-                                }
-                            },
-                            onPreferenceClick = {
-                                if (!isCheckingUpdates) {
-                                    scope.launch {
-                                        isCheckingUpdates = true
+                item {
+                    TextPreferenceWidget(
+                        title = stringResource(SYMR.strings.about_project_url),
+                        subtitle = PROJECT_URL,
+                        onPreferenceClick = { context.openInBrowser(PROJECT_URL) },
+                    )
+                }
 
-                                        checkVersion(
-                                            context = context,
-                                            onAvailableUpdate = { result ->
-                                                val updateScreen = NewUpdateScreen(
-                                                    versionName = result.release.version,
-                                                    changelogInfo = result.release.info,
-                                                    releaseLink = result.release.releaseLink,
-                                                    downloadLink = result.release.getDownloadLink(),
-                                                )
-                                                navigator.push(updateScreen)
-                                            },
-                                            onFinish = {
-                                                isCheckingUpdates = false
-                                            },
+                item {
+                    TextPreferenceWidget(
+                        title = stringResource(SYMR.strings.about_check_update),
+                        subtitle = getVersionName(withBuildDate = false),
+                        onPreferenceClick = {
+                            scope.launch {
+                                val result = try {
+                                    Injekt.get<GetApplicationRelease>().await(
+                                        GetApplicationRelease.Arguments(
+                                            isPreviewBuildType,
+                                            BuildConfig.COMMIT_COUNT.toInt(),
+                                            BuildConfig.VERSION_NAME,
+                                            GITHUB_REPO,
+                                            syDebugVersion,
+                                            forceCheck = true,
+                                        ),
+                                    )
+                                } catch (e: Exception) {
+                                    context.toast(checkFailedMsg)
+                                    return@launch
+                                }
+                                when (result) {
+                                    is GetApplicationRelease.Result.NewUpdate -> {
+                                        navigator.push(
+                                            NewUpdateScreen(
+                                                versionName = result.release.version,
+                                                changelogInfo = result.release.info,
+                                                releaseLink = result.release.releaseLink,
+                                                downloadLink = result.release.getDownloadLink(),
+                                            ),
                                         )
                                     }
+                                    GetApplicationRelease.Result.NoNewUpdate -> context.toast(latestVersionMsg)
+                                    GetApplicationRelease.Result.OsTooOld -> {}
                                 }
-                            },
-                        )
-                    }
-                }
-
-                if (!BuildConfig.DEBUG) {
-                    item {
-                        TextPreferenceWidget(
-                            title = stringResource(MR.strings.whats_new),
-                            // SY -->
-                            onPreferenceClick = { showWhatsNewDialog = true },
-                            // SY <--
-                        )
-                    }
-                }
-
-                // item {
-                //     TextPreferenceWidget(
-                //         title = stringResource(MR.strings.help_translate),
-                //         onPreferenceClick = { uriHandler.openUri("https://mihon.app/docs/contribute#translation") },
-                //     )
-                // }
-
-                item {
-                    TextPreferenceWidget(
-                        title = stringResource(MR.strings.licenses),
-                        onPreferenceClick = { navigator.push(OpenSourceLicensesScreen()) },
+                            }
+                        },
                     )
                 }
-
-                item {
-                    TextPreferenceWidget(
-                        title = stringResource(MR.strings.privacy_policy),
-                        onPreferenceClick = { uriHandler.openUri("https://mihon.app/privacy/") },
-                    )
-                }
-
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.Center,
-                    ) {
-                        LinkIcon(
-                            label = stringResource(MR.strings.website),
-                            icon = Icons.Outlined.Public,
-                            url = "https://mihon.app",
-                        )
-                        LinkIcon(
-                            label = "Discord",
-                            icon = CustomIcons.Discord,
-                            url = "https://discord.gg/mihon",
-                        )
-                        LinkIcon(
-                            label = "X",
-                            icon = CustomIcons.X,
-                            url = "https://x.com/mihonapp",
-                        )
-                        LinkIcon(
-                            label = "Facebook",
-                            icon = CustomIcons.Facebook,
-                            url = "https://facebook.com/mihonapp",
-                        )
-                        LinkIcon(
-                            label = "Reddit",
-                            icon = CustomIcons.Reddit,
-                            url = "https://www.reddit.com/r/mihonapp",
-                        )
-                        LinkIcon(
-                            label = "GitHub",
-                            icon = CustomIcons.Github,
-                            // SY -->
-                            url = "https://github.com/jobobby04/tachiyomisy",
-                            // SY <--
-                        )
-                    }
-                }
-            }
-        }
-
-        // SY -->
-        if (showWhatsNewDialog) {
-            WhatsNewDialog(onDismissRequest = { showWhatsNewDialog = false })
-        }
-        // SY <--
-    }
-
-    /**
-     * Checks version and shows a user prompt if an update is available.
-     */
-    private suspend fun checkVersion(
-        context: Context,
-        onAvailableUpdate: (GetApplicationRelease.Result.NewUpdate) -> Unit,
-        onFinish: () -> Unit,
-    ) {
-        val updateChecker = AppUpdateChecker()
-        withUIContext {
-            try {
-                when (val result = withIOContext { updateChecker.checkForUpdate(context, forceCheck = true) }) {
-                    is GetApplicationRelease.Result.NewUpdate -> {
-                        onAvailableUpdate(result)
-                    }
-                    is GetApplicationRelease.Result.NoNewUpdate -> {
-                        context.toast(MR.strings.update_check_no_new_updates)
-                    }
-                    is GetApplicationRelease.Result.OsTooOld -> {
-                        context.toast(MR.strings.update_check_eol)
-                    }
-                }
-            } catch (e: Exception) {
-                context.toast(e.message)
-                logcat(LogPriority.ERROR, e)
-            } finally {
-                onFinish()
             }
         }
     }
@@ -304,4 +192,8 @@ object AboutScreen : Screen() {
             BuildConfig.BUILD_TIME
         }
     }
+
+    private const val EASTER_EGG_URL = "https://arcxingye.github.io/rr/a1.html"
+
+    private const val PROJECT_URL = "https://github.com/zhzipu/TachiyomiX"
 }

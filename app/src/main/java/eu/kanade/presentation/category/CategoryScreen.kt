@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import eu.kanade.presentation.category.components.CategoryFloatingActionButton
 import eu.kanade.presentation.category.components.CategoryListItem
 import eu.kanade.presentation.components.AppBar
+import eu.kanade.tachiyomi.data.upload.isDownloadCategory
 import eu.kanade.tachiyomi.ui.category.CategoryScreenState
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -114,6 +115,14 @@ private fun CategoryContent(
                     category = category,
                     onRename = { onClickRename(category) },
                     onDelete = { onClickDelete(category) },
+                    // SY -->
+                    // 「下载」是下载模块的固定分类：**不可删除、不可重命名**，但**可以拖动排序**
+                    //（用户要求）。名字锁住是因为它靠名字认自己；排序锁住没有任何理由 ——
+                    // `DownloadCategory` 当初建它时只是把自己放在「默认」右侧，之后本就该听用户的。
+                    // 真正的拦截在 `CategoryScreenModel.renameCategory` / `deleteCategory`，
+                    // 这里只是不给入口。
+                    editable = !category.isDownloadCategory,
+                    // SY <--
                 )
             }
         }

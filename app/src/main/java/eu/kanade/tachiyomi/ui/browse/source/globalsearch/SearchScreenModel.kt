@@ -25,6 +25,9 @@ import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.manga.model.Manga
+import tachiyomi.domain.source.interactor.ClearSearchHistory
+import tachiyomi.domain.source.interactor.GetSearchHistory
+import tachiyomi.domain.source.interactor.InsertSearchHistory
 import tachiyomi.domain.source.service.SourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -37,7 +40,11 @@ abstract class SearchScreenModel(
     private val extensionManager: ExtensionManager = Injekt.get(),
     private val networkToLocalManga: NetworkToLocalManga = Injekt.get(),
     private val getManga: GetManga = Injekt.get(),
+    private val getSearchHistory: GetSearchHistory = Injekt.get(),
+    private val insertSearchHistory: InsertSearchHistory = Injekt.get(),
+    private val clearSearchHistoryInteractor: ClearSearchHistory = Injekt.get(),
     private val preferences: SourcePreferences = Injekt.get(),
+    private val searchHistoryScope: String = "search",
 ) : StateScreenModel<SearchScreenModel.State>(initialState) {
 
     private val coroutineDispatcher = Executors.newFixedThreadPool(5).asCoroutineDispatcher()
@@ -65,6 +72,13 @@ abstract class SearchScreenModel(
             preferences.globalSearchFilterState.changes().collectLatest { state ->
                 mutableState.update { it.copy(onlyShowHasResults = state) }
             }
+        }
+
+        screenModelScope.launch {
+            getSearchHistory.subscribe(searchHistoryScope)
+                .collectLatest { queries ->
+                    mutableState.update { it.copy(searchHistory = queries) }
+                }
         }
     }
 
@@ -111,6 +125,12 @@ abstract class SearchScreenModel(
         mutableState.update { it.copy(searchQuery = query) }
     }
 
+    fun clearSearchHistory() {
+        screenModelScope.launchIO {
+            clearSearchHistoryInteractor.await(searchHistoryScope)
+        }
+    }
+
     fun setSourceFilter(filter: SourceFilter) {
         mutableState.update { it.copy(sourceFilter = filter) }
         search()
@@ -125,6 +145,10 @@ abstract class SearchScreenModel(
         val sourceFilter = state.value.sourceFilter
 
         if (query.isNullOrBlank()) return
+
+        screenModelScope.launchIO {
+            insertSearchHistory.await(searchHistoryScope, query)
+        }
 
         val sameQuery = this.lastQuery == query
         if (sameQuery && this.lastSourceFilter == sourceFilter) return
@@ -205,6 +229,64 @@ abstract class SearchScreenModel(
         mutableState.update { it.copy(dialog = null) }
     }
 
+    // --- 多选模式（与图源漫画列表一致） ---
+
+    fun toggleSelectionMode() {
+        mutableState.update { state ->
+            if (state.selectionMode) {
+                state.copy(selectionMode = false, selection = emptyList())
+            } else {
+                state.copy(selectionMode = true)
+            }
+        }
+    }
+
+    fun toggleSelection(manga: Manga) {
+        mutableState.update { state ->
+            val newSelection = if (state.selection.any { it.id == manga.id }) {
+                state.selection.filterNot { it.id == manga.id }
+            } else {
+                state.selection + manga
+            }
+            state.copy(
+                selection = newSelection,
+                selectionMode = state.selectionMode && newSelection.isNotEmpty(),
+            )
+        }
+    }
+
+    fun selectAllVisible(mangas: List<Manga>) {
+        mutableState.update { state ->
+            val currentIds = state.selection.map { it.id }.toSet()
+            state.copy(
+                selection = state.selection + mangas.filterNot { it.id in currentIds },
+                selectionMode = true,
+            )
+        }
+    }
+
+    fun invertSelectionVisible(mangas: List<Manga>) {
+        mutableState.update { state ->
+            val currentIds = state.selection.map { it.id }.toSet()
+            val visibleIds = mangas.map { it.id }.toSet()
+            state.copy(
+                selection = state.selection.filterNot { it.id in visibleIds } +
+                    mangas.filterNot { it.id in currentIds },
+            )
+        }
+    }
+
+    /** 全选/全不选某个图源内的搜索结果 */
+    fun toggleSourceSelection(mangas: List<Manga>, selected: Boolean) {
+        mutableState.update { state ->
+            val ids = mangas.map { it.id }.toSet()
+            val remaining = state.selection.filterNot { it.id in ids }
+            state.copy(
+                selection = if (selected) remaining + mangas else remaining,
+            )
+        }
+    }
+
     @Immutable
     data class State(
         val from: Manga? = null,
@@ -213,6 +295,9 @@ abstract class SearchScreenModel(
         val onlyShowHasResults: Boolean = false,
         val items: Map<Source, SearchItemResult> = mapOf(),
         val dialog: Dialog? = null,
+        val searchHistory: List<String> = emptyList(),
+        val selectionMode: Boolean = false,
+        val selection: List<Manga> = emptyList(),
     ) {
         val progress: Int = items.count { it.value !is SearchItemResult.Loading }
         val total: Int = items.size

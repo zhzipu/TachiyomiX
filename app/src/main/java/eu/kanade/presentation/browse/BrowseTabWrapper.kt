@@ -4,8 +4,9 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
+import eu.kanade.presentation.components.AppBarTitle
+import eu.kanade.presentation.components.SearchToolbar
 import eu.kanade.presentation.components.TabContent
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
@@ -15,8 +16,13 @@ fun BrowseTabWrapper(tab: TabContent, onBackPressed: (() -> Unit)? = null) {
     val snackbarHostState = remember { SnackbarHostState() }
     Scaffold(
         topBar = { scrollBehavior ->
-            AppBar(
-                title = stringResource(tab.titleRes),
+            SearchToolbar(
+                titleContent = {
+                    AppBarTitle(title = stringResource(tab.titleRes))
+                },
+                searchEnabled = tab.searchEnabled,
+                searchQuery = tab.searchQuery,
+                onChangeSearchQuery = tab.onChangeSearchQuery,
                 actions = {
                     AppBarActions(tab.actions)
                 },

@@ -37,7 +37,6 @@ dependencies {
     implementation(libs.androidx.compose.materialIcons)
     implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.compose.animationGraphics)
-    debugImplementation(libs.androidx.compose.uiTooling)
     implementation(libs.androidx.compose.uiToolingPreview)
     implementation(libs.androidx.compose.uiUtil)
 

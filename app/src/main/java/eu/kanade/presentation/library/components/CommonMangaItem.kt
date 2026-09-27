@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -79,41 +80,50 @@ fun MangaCompactGridItem(
     coverAlpha: Float = 1f,
     coverBadgeStart: @Composable (RowScope.() -> Unit)? = null,
     coverBadgeEnd: @Composable (RowScope.() -> Unit)? = null,
+    // SY -->
+    // 只有书架「下载」分类会传值，其余调用点（浏览页等）保持 null，不显示进度条
+    progress: LibraryItemProgress? = null,
+    // SY <--
 ) {
     GridItemSelectable(
         isSelected = isSelected,
         onClick = onClick,
         onLongClick = onLongClick,
     ) {
-        MangaGridCover(
-            cover = {
-                MangaCover.Book(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .alpha(if (isSelected) GRID_SELECTED_COVER_ALPHA else coverAlpha),
-                    data = coverData,
-                )
-            },
-            badgesStart = coverBadgeStart,
-            badgesEnd = coverBadgeEnd,
-            content = {
-                if (title != null) {
-                    CoverTextOverlay(
-                        title = title,
-                        onClickContinueReading = onClickContinueReading,
-                    )
-                } else if (onClickContinueReading != null) {
-                    ContinueReadingButton(
-                        size = ContinueReadingButtonSizeLarge,
-                        iconSize = ContinueReadingButtonIconSizeLarge,
-                        onClick = onClickContinueReading,
+        Column {
+            MangaGridCover(
+                cover = {
+                    MangaCover.Book(
                         modifier = Modifier
-                            .padding(ContinueReadingButtonGridPadding)
-                            .align(Alignment.BottomEnd),
+                            .fillMaxWidth()
+                            .alpha(if (isSelected) GRID_SELECTED_COVER_ALPHA else coverAlpha),
+                        data = coverData,
                     )
-                }
-            },
-        )
+                },
+                badgesStart = coverBadgeStart,
+                badgesEnd = coverBadgeEnd,
+                content = {
+                    if (title != null) {
+                        CoverTextOverlay(
+                            title = title,
+                            onClickContinueReading = onClickContinueReading,
+                        )
+                    } else if (onClickContinueReading != null) {
+                        ContinueReadingButton(
+                            size = ContinueReadingButtonSizeLarge,
+                            iconSize = ContinueReadingButtonIconSizeLarge,
+                            onClick = onClickContinueReading,
+                            modifier = Modifier
+                                .padding(ContinueReadingButtonGridPadding)
+                                .align(Alignment.BottomEnd),
+                        )
+                    }
+                },
+            )
+            // SY -->
+            progress?.let { LibraryItemProgressBars(it) }
+            // SY <--
+        }
     }
 }
 
@@ -185,6 +195,11 @@ fun MangaComfortableGridItem(
     coverBadgeStart: (@Composable RowScope.() -> Unit)? = null,
     coverBadgeEnd: (@Composable RowScope.() -> Unit)? = null,
     onClickContinueReading: (() -> Unit)? = null,
+    // SY -->
+    // 只有书架「下载」分类会传值，其余调用点保持 null，完全不画进度条。
+    // 传了值也不一定画 —— 由 `LibraryItemProgress.visible` 决定（没有任务时隐藏）
+    progress: LibraryItemProgress? = null,
+    // SY <--
 ) {
     GridItemSelectable(
         isSelected = isSelected,
@@ -223,6 +238,9 @@ fun MangaComfortableGridItem(
                 minLines = 2,
                 maxLines = titleMaxLines,
             )
+            // SY -->
+            progress?.let { LibraryItemProgressBars(it) }
+            // SY <--
         }
     }
 }
@@ -338,42 +356,73 @@ fun MangaListItem(
     isSelected: Boolean = false,
     coverAlpha: Float = 1f,
     onClickContinueReading: (() -> Unit)? = null,
+    sourceName: String? = null,
+    // SY -->
+    // 只有书架「下载」分类会传值，其余调用点保持 null，完全不画进度条。
+    // 传了值也不一定画 —— 由 `LibraryItemProgress.visible` 决定（没有任务时隐藏）
+    progress: LibraryItemProgress? = null,
+    // SY <--
 ) {
-    Row(
-        modifier = Modifier
-            .selectedBackground(isSelected)
-            .height(56.dp)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick,
-            )
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Column(
+        // SY --> 「下载」分类可能要在下方画进度条；有进度数据时外层不做底色，
+        // 交给内层 Row 画，这样进度条区域不会被选中底色染上
+        modifier = if (progress == null) Modifier.selectedBackground(isSelected) else Modifier,
+        // SY <--
     ) {
-        MangaCover.Square(
+        Row(
             modifier = Modifier
-                .fillMaxHeight()
-                .alpha(coverAlpha),
-            data = coverData,
-        )
-        Text(
-            text = title,
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .weight(1f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        BadgeGroup(content = badge)
-        if (onClickContinueReading != null) {
-            ContinueReadingButton(
-                size = ContinueReadingButtonSizeSmall,
-                iconSize = ContinueReadingButtonIconSizeSmall,
-                onClick = onClickContinueReading,
-                modifier = Modifier.padding(start = ContinueReadingButtonListSpacing),
+                // SY -->
+                .then(if (progress != null) Modifier.selectedBackground(isSelected) else Modifier)
+                // SY <--
+                .height(56.dp)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                )
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MangaCover.Square(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .alpha(coverAlpha),
+                data = coverData,
             )
+            Text(
+                text = title,
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .weight(1f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (!sourceName.isNullOrBlank()) {
+                Text(
+                    text = sourceName,
+                    modifier = Modifier
+                        .widthIn(max = 120.dp)
+                        .padding(end = 4.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                )
+            }
+            BadgeGroup(content = badge)
+            if (onClickContinueReading != null) {
+                ContinueReadingButton(
+                    size = ContinueReadingButtonSizeSmall,
+                    iconSize = ContinueReadingButtonIconSizeSmall,
+                    onClick = onClickContinueReading,
+                    modifier = Modifier.padding(start = ContinueReadingButtonListSpacing),
+                )
+            }
         }
+        // SY -->
+        progress?.let { LibraryItemProgressBars(it) }
+        // SY <--
     }
 }
 

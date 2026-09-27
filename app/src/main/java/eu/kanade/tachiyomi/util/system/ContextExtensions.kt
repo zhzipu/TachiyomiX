@@ -156,6 +156,35 @@ val Context.hasMiuiPackageInstaller get() = isPackageInstalled("com.miui.package
 
 val Context.isShizukuInstalled get() = isPackageInstalled("moe.shizuku.privileged.api") || Sui.isSui()
 
+// SY -->
+/**
+ * 外部安装器 InstallerX Revived 的包名候选，https://github.com/wxxsfxyzm/InstallerX-Revived
+ *
+ * InstallerX Revived 会按构建 flavor 改写 applicationId，同一个安装包在不同渠道下包名不同：
+ * - `com.rosan.installer.x`          正式发布（Stable / Alpha 渠道）
+ * - `com.rosan.installer.x.revived`  另一套发布渠道，部分来源（如应用商店转发）装出来是这个
+ *
+ * 两者内部 Activity 完全一致（`com.rosan.installer.ui.activity.InstallerActivity`），
+ * 因此只要是其中之一在设备上就算「已安装」。**不要只保留一个**，否则换台设备就会误判。
+ */
+val INSTALLERX_PACKAGE_NAMES = listOf(
+    "com.rosan.installer.x",
+    "com.rosan.installer.x.revived",
+)
+
+/** 默认优先使用的包名，保证 `intent.setPackage` 只指向一个目标。 */
+val INSTALLERX_PACKAGE_NAME get() = INSTALLERX_PACKAGE_NAMES.first()
+
+/** InstallerX Revived 的项目地址，用于未安装时引导用户下载。 */
+const val INSTALLERX_PROJECT_URL = "https://github.com/wxxsfxyzm/InstallerX-Revived"
+
+/** 设备上实际存在的 InstallerX 包名，未安装时为 null。 */
+val Context.installerXPackageName: String?
+    get() = INSTALLERX_PACKAGE_NAMES.firstOrNull { isPackageInstalled(it) }
+
+val Context.isInstallerXInstalled get() = installerXPackageName != null
+// SY <--
+
 fun Context.launchRequestPackageInstallsPermission() {
     val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {

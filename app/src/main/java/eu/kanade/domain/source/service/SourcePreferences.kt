@@ -2,6 +2,7 @@ package eu.kanade.domain.source.service
 
 import eu.kanade.domain.source.interactor.SetMigrateSorting
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import kotlinx.serialization.json.Json
 import mihon.domain.migration.models.MigrationFlag
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
@@ -24,6 +25,15 @@ class SourcePreferences(
         "source_languages",
         LocaleHelper.getDefaultEnabledLanguages(),
     )
+
+    // SY -->
+    val languageOrder: Preference<List<String>> = preferenceStore.getObjectFromString(
+        "source_language_order",
+        emptyList(),
+        serializer = { it.joinToString(",") },
+        deserializer = { it.split(",").filter(String::isNotEmpty) },
+    )
+    // SY <--
 
     val disabledSources: Preference<Set<String>> = preferenceStore.getStringSet("hidden_catalogues", emptySet())
 
@@ -107,6 +117,15 @@ class SourcePreferences(
     )
 
     val recommendationSearchFlags: Preference<Int> = preferenceStore.getInt("rec_search_flags", Int.MAX_VALUE)
+
+    val browseSourceTags: Preference<List<String>> = preferenceStore.getObjectFromString(
+        key = "browse_source_tags",
+        defaultValue = emptyList(),
+        serializer = { Json.encodeToString(it) },
+        deserializer = { runCatching { Json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) },
+    )
+
+    val browseSwipeToPage: Preference<Boolean> = preferenceStore.getBoolean("browse_swipe_to_page", false)
     // SY <--
 
     val migrationSources: Preference<List<Long>> = preferenceStore.getLongArray("migration_sources", emptyList())

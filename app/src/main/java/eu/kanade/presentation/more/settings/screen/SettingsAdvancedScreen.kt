@@ -36,6 +36,7 @@ import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.source.service.SourcePreferences.DataSaver
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.advanced.ClearDatabaseScreen
+import eu.kanade.presentation.more.settings.screen.advanced.ModelPacksScreen
 import eu.kanade.presentation.more.settings.screen.debug.DebugInfoScreen
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.core.security.SecurityPreferences
@@ -61,8 +62,8 @@ import eu.kanade.tachiyomi.ui.more.OnboardingScreen
 import eu.kanade.tachiyomi.util.CrashLogUtil
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.system.GLUtil
-import eu.kanade.tachiyomi.util.system.isDebugBuildType
-import eu.kanade.tachiyomi.util.system.isPreviewBuildType
+import eu.kanade.tachiyomi.util.system.INSTALLERX_PROJECT_URL
+import eu.kanade.tachiyomi.util.system.isInstallerXInstalled
 import eu.kanade.tachiyomi.util.system.isShizukuInstalled
 import eu.kanade.tachiyomi.util.system.powerManager
 import eu.kanade.tachiyomi.util.system.setDefaultSettings
@@ -236,6 +237,11 @@ object SettingsAdvancedScreen : SearchableSettings {
                     title = stringResource(MR.strings.pref_clear_database),
                     subtitle = stringResource(MR.strings.pref_clear_database_summary),
                     onClick = { navigator.push(ClearDatabaseScreen()) },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_model_packs),
+                    subtitle = stringResource(MR.strings.pref_model_packs_summary),
+                    onClick = { navigator.push(ModelPacksScreen()) },
                 ),
             ),
         )
@@ -456,6 +462,9 @@ object SettingsAdvancedScreen : SearchableSettings {
         val uriHandler = LocalUriHandler.current
         val extensionInstallerPref = basePreferences.extensionInstaller
         var shizukuMissing by rememberSaveable { mutableStateOf(false) }
+        // SY -->
+        var installerXMissing by rememberSaveable { mutableStateOf(false) }
+        // SY <--
         val trustExtension = remember { Injekt.get<TrustExtension>() }
 
         if (shizukuMissing) {
@@ -481,32 +490,59 @@ object SettingsAdvancedScreen : SearchableSettings {
                 },
             )
         }
+        // SY -->
+        // 未安装 InstallerX Revived 时的引导弹窗：
+        // 取消 → 直接关闭，不做任何操作；
+        // 确定 → 关闭并打开项目地址。
+        // 两个分支都**不会**改动「安装程序」的取值（拦截逻辑在下面的 onValueChanged 返回 false）。
+        if (installerXMissing) {
+            val dismiss = { installerXMissing = false }
+            AlertDialog(
+                onDismissRequest = dismiss,
+                title = { Text(text = stringResource(MR.strings.ext_installer_installerx)) },
+                text = { Text(text = stringResource(MR.strings.ext_installer_installerx_unavailable_dialog)) },
+                dismissButton = {
+                    TextButton(onClick = dismiss) {
+                        Text(text = stringResource(MR.strings.action_cancel))
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            dismiss()
+                            uriHandler.openUri(INSTALLERX_PROJECT_URL)
+                        },
+                    ) {
+                        Text(text = stringResource(MR.strings.action_ok))
+                    }
+                },
+            )
+        }
+        // SY <--
         return Preference.PreferenceGroup(
             title = stringResource(MR.strings.label_extensions),
             preferenceItems = listOf(
                 Preference.PreferenceItem.ListPreference(
                     preference = extensionInstallerPref,
                     entries = extensionInstallerPref.entries
-                        .filter {
-                            // TODO: allow private option in stable versions once URL handling is more fleshed out
-                            if (isPreviewBuildType || isDebugBuildType) {
-                                true
-                            } else {
-                                it != BasePreferences.ExtensionInstaller.PRIVATE
-                            }
-                        }
                         .associateWith { stringResource(it.titleRes) },
                     title = stringResource(MR.strings.ext_installer_pref),
+                    // SY --> 选到不可用的安装器时拦下来并给出安装引导。
+                    // 返回 false 会让 PreferenceItem 跳过 internalSet，因此设置值保持不变（见 PreferenceItem.kt 的调用点）。
                     onValueChanged = {
-                        if (it == BasePreferences.ExtensionInstaller.SHIZUKU &&
-                            !context.isShizukuInstalled
-                        ) {
-                            shizukuMissing = true
-                            false
-                        } else {
-                            true
+                        when {
+                            it == BasePreferences.ExtensionInstaller.SHIZUKU && !context.isShizukuInstalled -> {
+                                shizukuMissing = true
+                                false
+                            }
+                            it == BasePreferences.ExtensionInstaller.INSTALLERX && !context.isInstallerXInstalled -> {
+                                installerXMissing = true
+                                false
+                            }
+                            else -> true
                         }
                     },
+                    // SY <--
                 ),
                 Preference.PreferenceItem.TextPreference(
                     title = stringResource(MR.strings.ext_revoke_trust),

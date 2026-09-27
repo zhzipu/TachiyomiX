@@ -16,13 +16,19 @@ import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.source.service.SourcePreferences.DataSaver
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.browse.SourceUiModel
+import eu.kanade.presentation.browse.components.NsfwFilter
+import eu.kanade.tachiyomi.extension.ExtensionManager
+import eu.kanade.tachiyomi.extension.model.Extension
+import eu.kanade.tachiyomi.util.system.LocaleHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
@@ -45,6 +51,7 @@ class SourcesScreenModel(
     private val toggleExcludeFromDataSaver: ToggleExcludeFromDataSaver = Injekt.get(),
     private val setSourceCategories: SetSourceCategories = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
+    private val extensionManager: ExtensionManager = Injekt.get(),
     val smartSearchConfig: SourcesScreen.SmartSearchConfig?,
     // SY <--
 ) : StateScreenModel<SourcesScreenModel.State>(State()) {
@@ -54,15 +61,46 @@ class SourcesScreenModel(
 
     val useNewSourceNavigation by uiPreferences.useNewSourceNavigation.asState(screenModelScope)
 
+    val sourceHomePage by uiPreferences.sourceHomePage.asState(screenModelScope)
+
     init {
         // SY -->
         combine(
-            getEnabledSources.subscribe(),
-            getSourceCategories.subscribe(),
-            getShowLatest.subscribe(smartSearchConfig != null),
-            flowOf(smartSearchConfig == null),
-            ::collectLatestSources,
-        )
+            combine(
+                getEnabledSources.subscribe(),
+                getSourceCategories.subscribe(),
+                getShowLatest.subscribe(smartSearchConfig != null),
+            ) { sources, categories, showLatest -> Triple(sources, categories, showLatest) },
+            combine(
+                flowOf(smartSearchConfig == null),
+                state.map { it.searchQuery to it.nsfwFilter }.distinctUntilChanged(),
+                sourcePreferences.enabledLanguages.changes(),
+                sourcePreferences.languageOrder.changes(),
+                extensionManager.installedExtensionsFlow,
+            ) { showPin, searchQueryAndNsfw, enabledLanguages, languageOrder, installedExtensions ->
+                val (searchQuery, nsfwFilter) = searchQueryAndNsfw
+                SourceUiData(
+                    showPin = showPin,
+                    searchQuery = searchQuery,
+                    nsfwFilter = nsfwFilter,
+                    enabledLanguages = enabledLanguages,
+                    languageOrder = languageOrder,
+                    installedExtensions = installedExtensions,
+                )
+            },
+        ) { sourceData, uiData ->
+            collectLatestSources(
+                sources = sourceData.first,
+                categories = sourceData.second,
+                showLatest = sourceData.third,
+                showPin = uiData.showPin,
+                searchQuery = uiData.searchQuery,
+                nsfwFilter = uiData.nsfwFilter,
+                enabledLanguages = uiData.enabledLanguages,
+                languageOrder = uiData.languageOrder,
+                installedExtensions = uiData.installedExtensions,
+            )
+        }
             .catch {
                 logcat(LogPriority.ERROR, it)
                 _events.send(Event.FailedFetchingSources)
@@ -82,8 +120,33 @@ class SourcesScreenModel(
         // SY <--
     }
 
-    private fun collectLatestSources(sources: List<Source>, categories: List<String>, showLatest: Boolean, showPin: Boolean) {
+    private fun collectLatestSources(
+        sources: List<Source>,
+        categories: List<String>,
+        showLatest: Boolean,
+        showPin: Boolean,
+        searchQuery: String?,
+        nsfwFilter: NsfwFilter,
+        enabledLanguages: Set<String>,
+        languageOrder: List<String>,
+        installedExtensions: List<Extension.Installed>,
+    ) {
         mutableState.update { state ->
+            val filteredSources = if (searchQuery.isNullOrBlank()) {
+                sources
+            } else {
+                val query = searchQuery.trim()
+                sources.filter { it.visualName.contains(query, ignoreCase = true) }
+            }
+            val nsfwSourceIds = installedExtensions
+                .filter { it.isNsfw }
+                .flatMap { it.sources.map { source -> source.id } }
+                .toSet()
+            val nsfwFilteredSources = when (nsfwFilter) {
+                NsfwFilter.ShowAll -> filteredSources
+                NsfwFilter.OnlyNsfw -> filteredSources.filter { it.id in nsfwSourceIds }
+                NsfwFilter.HideNsfw -> filteredSources.filter { it.id !in nsfwSourceIds }
+            }
             val map = TreeMap<String, MutableList<Source>> { d1, d2 ->
                 // Sources without a lang defined will be placed at the end
                 when {
@@ -100,7 +163,7 @@ class SourcesScreenModel(
                     else -> d1.compareTo(d2)
                 }
             }
-            val byLang = sources.groupByTo(map) {
+            val byLang = nsfwFilteredSources.groupByTo(map) {
                 when {
                     // SY -->
                     it.category != null -> "$CATEGORY_KEY_PREFIX${it.category}"
@@ -121,7 +184,7 @@ class SourcesScreenModel(
                                 it.value.firstOrNull()?.category != null,
                             ),
                             *it.value.map { source ->
-                                SourceUiModel.Item(source)
+                                SourceUiModel.Item(source, source.id in nsfwSourceIds)
                             }.toTypedArray(),
                         )
                     },
@@ -130,6 +193,7 @@ class SourcesScreenModel(
                     .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it }),
                 showPin = showPin,
                 showLatest = showLatest,
+                installedLanguages = LocaleHelper.sortLanguages(enabledLanguages, languageOrder),
                 // SY <--
             )
         }
@@ -138,6 +202,35 @@ class SourcesScreenModel(
     fun toggleSource(source: Source) {
         toggleSource.await(source)
     }
+
+    fun search(query: String?) {
+        mutableState.update { it.copy(searchQuery = query) }
+    }
+
+    // SY -->
+    fun toggleNsfwFilter() {
+        mutableState.update { state ->
+            val next = when (state.nsfwFilter) {
+                NsfwFilter.ShowAll -> NsfwFilter.OnlyNsfw
+                NsfwFilter.OnlyNsfw -> NsfwFilter.HideNsfw
+                NsfwFilter.HideNsfw -> NsfwFilter.ShowAll
+            }
+            state.copy(nsfwFilter = next)
+        }
+    }
+
+    fun moveLanguage(lang: String, targetIndex: Int) {
+        mutableState.update { state ->
+            val current = state.languageOrder.ifEmpty { state.installedLanguages }
+            val updated = current.toMutableList().apply {
+                remove(lang)
+                add(targetIndex.coerceIn(0, size), lang)
+            }
+            sourcePreferences.languageOrder.set(updated)
+            state.copy(languageOrder = updated)
+        }
+    }
+    // SY <--
 
     fun togglePin(source: Source) {
         toggleSourcePin.await(source)
@@ -179,15 +272,28 @@ class SourcesScreenModel(
         val dialog: Dialog? = null,
         val isLoading: Boolean = true,
         val items: List<SourceUiModel> = emptyList(),
+        val searchQuery: String? = null,
         // SY -->
         val categories: List<String> = emptyList(),
         val showPin: Boolean = true,
         val showLatest: Boolean = false,
         val dataSaverEnabled: Boolean = false,
+        val installedLanguages: List<String> = emptyList(),
+        val languageOrder: List<String> = emptyList(),
+        val nsfwFilter: NsfwFilter = NsfwFilter.ShowAll,
         // SY <--
     ) {
         val isEmpty = items.isEmpty()
     }
+
+    private data class SourceUiData(
+        val showPin: Boolean,
+        val searchQuery: String?,
+        val nsfwFilter: NsfwFilter,
+        val enabledLanguages: Set<String>,
+        val languageOrder: List<String>,
+        val installedExtensions: List<Extension.Installed>,
+    )
 
     companion object {
         const val PINNED_KEY = "pinned"

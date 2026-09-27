@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
@@ -19,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -26,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import eu.kanade.domain.source.interactor.SetMigrateSorting
 import eu.kanade.presentation.browse.components.BaseSourceItem
 import eu.kanade.presentation.browse.components.SourceIcon
+import eu.kanade.presentation.components.LocalTabScrollToTopState
 import eu.kanade.tachiyomi.ui.browse.migration.sources.MigrateSourceScreenModel
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import tachiyomi.domain.source.model.Source
@@ -95,7 +98,18 @@ private fun MigrateSourceList(
     onClickAll: (Source) -> Unit,
     // SY <--
 ) {
+    val listState = rememberLazyListState()
+    // SY -->
+    // 再次点击顶部当前标签时，列表带动画回到顶部
+    val tabScrollToTop = LocalTabScrollToTopState.current
+    LaunchedEffect(tabScrollToTop.nonce) {
+        if (tabScrollToTop.nonce > 0 && tabScrollToTop.isCurrentPage) {
+            listState.animateScrollToItem(0)
+        }
+    }
+    // SY <--
     ScrollbarLazyColumn(
+        state = listState,
         contentPadding = contentPadding + topSmallPaddingValues,
     ) {
         stickyHeader(key = STICKY_HEADER_KEY_PREFIX) {

@@ -13,6 +13,7 @@ import com.eygraber.sqldelight.androidx.driver.AndroidxSqliteDriver
 import com.eygraber.sqldelight.androidx.driver.FileProvider
 import eu.kanade.domain.track.store.DelayedTrackingStore
 import eu.kanade.tachiyomi.BuildConfig
+import eu.kanade.tachiyomi.clash.ClashManager
 import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.cache.CoverCache
@@ -20,7 +21,10 @@ import eu.kanade.tachiyomi.data.cache.PagePreviewCache
 import eu.kanade.tachiyomi.data.download.DownloadCache
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.download.DownloadProvider
+import eu.kanade.tachiyomi.data.upload.DownloadCategory
+import eu.kanade.tachiyomi.data.upload.UploadManager
 import eu.kanade.tachiyomi.data.saver.ImageSaver
+import eu.kanade.tachiyomi.data.sync.service.AliyunPanService
 import eu.kanade.tachiyomi.data.sync.service.GoogleDriveService
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.extension.ExtensionManager
@@ -109,6 +113,11 @@ class AppModule(val app: Application) : InjektModule {
                 configuration = AndroidxSqliteConfiguration(
                     isForeignKeyConstraintsEnabled = true,
                 ),
+                onConfigure = {
+                    // Avoid SQLITE_BUSY ("database is locked") when concurrent writes
+                    // (e.g. sync restore launching several restorers in parallel) contend.
+                    executePragma("busy_timeout = 5000")
+                },
             ).also { sqlDriverRef = WeakReference(it) }
         }
         addSingletonFactory {
@@ -154,8 +163,12 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { ChapterCache(app, get(), get()) }
         addSingletonFactory { CoverCache(app) }
 
-        addSingletonFactory { NetworkHelper(app, get(), BuildConfig.DEBUG) }
+        addSingletonFactory { NetworkHelper(app, get(), BuildConfig.DEBUG, get()) }
         addSingletonFactory { JavaScriptEngine(app) }
+
+        // SY -->
+        addSingletonFactory { ClashManager(app, get()) }
+        // SY <--
 
         addSingletonFactory<SourceManager> { AndroidSourceManager(app, get(), get()) }
         addSingletonFactory { ExtensionManager(app) }
@@ -180,6 +193,14 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { PagePreviewCache(app) }
 
         addSingletonFactory { GoogleDriveService(app) }
+
+        addSingletonFactory { AliyunPanService(app) }
+
+        // 书架常驻的「下载」分类
+        addSingletonFactory { DownloadCategory() }
+
+        // 上传管理器：单例，创建时就会挂上「下载结束 → 自动上传」的观察
+        addSingletonFactory { UploadManager(app) }
         // SY <--
     }
 }
@@ -196,6 +217,8 @@ fun initExpensiveComponents(app: Application) {
         Injekt.get<DownloadManager>()
 
         // SY -->
+        // 创建即启动：UploadManager 的 init 里会挂上「下载结束 → 自动上传」的观察
+        Injekt.get<UploadManager>()
         Injekt.get<GetCustomMangaInfo>()
         // SY <--
     }

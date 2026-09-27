@@ -8,6 +8,7 @@ import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.io.File
+import java.net.Proxy
 import java.util.concurrent.TimeUnit
 
 /* SY --> */
@@ -16,6 +17,7 @@ open /* SY <-- */ class NetworkHelper(
     private val preferences: NetworkPreferences,
     // SY -->
     val isDebugBuild: Boolean,
+    private val clashPreferences: ClashPreferences? = null,
     // SY <--
 ) {
 
@@ -44,6 +46,10 @@ open /* SY <-- */ class NetworkHelper(
             builder.addNetworkInterceptor(httpLoggingInterceptor)
         }
 
+        // SY -->
+        clashPreferences?.let { builder.proxySelector(ClashProxySelector(it)) }
+        // SY <--
+
         when (preferences.dohProvider.get()) {
             PREF_DOH_CLOUDFLARE -> builder.dohCloudflare()
             PREF_DOH_GOOGLE -> builder.dohGoogle()
@@ -66,6 +72,16 @@ open /* SY <-- */ class NetworkHelper(
         .addInterceptor(
             CloudflareInterceptor(context, cookieJar, ::defaultUserAgentProvider),
         )
+        .build()
+
+    /**
+     * Client that always connects directly, bypassing the built-in Clash proxy
+     * and the manual HTTP proxy. Used for the plugin marketplace, update checks
+     * and APK downloads, which must not be routed through the proxy. Setting a
+     * fixed [Proxy.NO_PROXY] makes OkHttp ignore the [ClashProxySelector].
+     */
+    val directClient: OkHttpClient = client.newBuilder()
+        .proxy(Proxy.NO_PROXY)
         .build()
 
     /**

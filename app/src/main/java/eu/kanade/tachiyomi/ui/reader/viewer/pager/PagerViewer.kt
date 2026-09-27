@@ -18,11 +18,16 @@ import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderItem
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
+import eu.kanade.tachiyomi.util.waifu2x.ImageEnhancer
+import eu.kanade.tachiyomi.util.waifu2x.ReaderEnhancement
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import tachiyomi.core.common.util.system.logcat
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import kotlin.math.min
 
@@ -102,7 +107,15 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         pager.isVisible = false // Don't layout the pager yet
         pager.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         pager.isFocusable = false
-        pager.offscreenPageLimit = 1
+        // 增强开启时，让离屏页数与增强预加载页数一致：相邻页保留在 ViewPager 中就不会被
+        // 回收重建，翻页时不必重新加载，避免出现长时间黑屏
+        val readerPreferences = Injekt.get<ReaderPreferences>()
+        pager.offscreenPageLimit = if (ReaderEnhancement.isEnabled(readerPreferences)) {
+            // 需求 4：预加载原图最少 3 页，保证增强有足够已加载原图可增量处理
+            readerPreferences.realCuganPreloadSize().get().coerceAtLeast(3)
+        } else {
+            2
+        }
         pager.id = R.id.reader_pager
         pager.adapter = adapter
         pager.addOnPageChangeListener(pagerListener)
@@ -121,6 +134,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 NavigationRegion.PREV -> moveToPrevious()
                 NavigationRegion.RIGHT -> moveRight()
                 NavigationRegion.LEFT -> moveLeft()
+                NavigationRegion.NONE -> {}
             }
         }
         pager.longTapListener = f@{
@@ -239,6 +253,16 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         logcat { "onReaderPageSelected: ${page.number}/${pages.size}" }
         activity.onPageSelected(page, hasExtraPage)
 
+        // 跨过渡页从上一章进入本章首页时，viewerChapters.currChapter 由 loadNewChapter 异步更新、
+        // 此刻仍指向旧章；且进入过渡页时已 cancelAll。这里同步把增强状态重置到本章正确页，
+        // 让 getPageHolder.onPageSelected → requestEnhancement 能以新章正确目标页启动增强，
+        // 否则第一页的增强永远不会自动开启。
+        val currentChapter = activity.viewModel.state.value.viewerChapters?.currChapter
+        if (page.chapter != currentChapter) {
+            logcat { "onReaderPageSelected: cross-chapter to ${page.chapter.chapter.url}, reset enhancer to page ${page.index}" }
+            ImageEnhancer.reset(page.index)
+        }
+
         // Notify holder of page change
         getPageHolder(page)?.onPageSelected(forward)
 
@@ -262,6 +286,10 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
     private fun onTransitionSelected(transition: ChapterTransition) {
         logcat { "onTransitionSelected: $transition" }
         val toChapter = transition.to
+        // 过渡页不显示页码（上一章/下一章切换页）
+        activity.onPageSelected(transition)
+        // 需求：进入过渡页时停止增强队列（当前章已读完，不再预加载增强任务）
+        ImageEnhancer.cancelAll(reason = "entered chapter transition")
         if (toChapter != null) {
             logcat { "Request preload destination chapter because we're on the transition" }
             activity.requestPreloadChapter(toChapter)
@@ -477,6 +505,49 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
     // SY -->
     fun setChaptersDoubleShift(chapters: ViewerChapters) {
         setChaptersInternal(chapters)
+        // 单/双页切换或双页错位后，当前 spread 的「首页」可能没变（单页变双页、双页变单页），
+        // onPageChange 因此不会回调，这里主动刷新一次，保证页码显示跟着变
+        notifySpreadChanged()
+    }
+
+    /**
+     * 按当前 spread 主动通知 activity 刷新页码显示。
+     */
+    private fun notifySpreadChanged() {
+        val joinedItem = adapter.joinedItems.getOrNull(pager.currentItem) ?: return
+        val first = joinedItem.first as? ReaderPage ?: return
+        activity.onPageSelected(first, joinedItem.second != null)
+    }
+
+    /**
+     * 当前 spread 的两个页：[first] 为 pair 里的第一页，[second] 为 null 表示单页显示。
+     */
+    fun currentSpread(): Pair<ReaderPage, ReaderPage?>? {
+        val joinedItem = adapter.joinedItems.getOrNull(pager.currentItem) ?: return null
+        val first = joinedItem.first as? ReaderPage ?: return null
+        return first to (joinedItem.second as? ReaderPage)
+    }
+
+    /**
+     * 原位重合并当前双页并刷新页码（请求 1+黑屏修复）：
+     * 用 holder 的「插底层」路径重合并，不清空视图、不重建 adapter，避免 2 秒黑屏。
+     */
+    fun invertCurrentSpread() {
+        val spread = currentSpread() ?: return
+        if (spread.second == null) return // 单页显示无需处理
+        getPageHolder(spread.first)?.refreshInverted()
+        // 双页跨页：刷新页码显示（换位后数字也跟随）
+        activity.onPageSelected(spread.first, true)
+    }
+
+    /**
+     * 双页换位动画（请求 2）：长按反转双页顺序时，用两张源页做"左页向右、右页向左"的对滑
+     * （下一次 [PagerPageHolder.mergePages] 就地触发）。[oldPageOnRight] 是换位前第 1 页是否显示在右侧。
+     */
+    fun animateDoublePageSwap(oldPageOnRight: Boolean) {
+        val spread = currentSpread() ?: return
+        if (spread.second == null) return // 单页显示无需换位动画
+        getPageHolder(spread.first)?.requestSwapAnimation(oldPageOnRight)
     }
 
     fun updateShifting(page: ReaderPage? = null) {

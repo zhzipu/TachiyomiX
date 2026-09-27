@@ -42,6 +42,7 @@ import eu.kanade.presentation.util.isTabletUi
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.isLocalOrStub
 import eu.kanade.tachiyomi.source.online.HttpSource
+import eu.kanade.tachiyomi.ui.browse.extension.details.SourcePreferencesScreen
 import eu.kanade.tachiyomi.ui.browse.source.SourcesScreen
 import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreen
 import eu.kanade.tachiyomi.ui.browse.source.feed.SourceFeedScreen
@@ -82,6 +83,8 @@ import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
+import tachiyomi.source.network.NetworkSource
+import tachiyomi.source.network.config.isPendingChapterUrl
 import tachiyomi.presentation.core.screens.LoadingScreen
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -121,6 +124,13 @@ class MangaScreen(
 
         val successState = state as MangaScreenModel.State.Success
         val isHttpSource = remember { successState.source is HttpSource }
+
+        // SY -->
+        // 网络图源没有「网页详情页」可看 —— 它的本体就是 WebDAV 上的一个目录，
+        // 那个 URL 打开也只是个文件列表。所以不给 WebView 入口
+        //（和浏览页去掉 WebView 的做法一致：`takeIf` 为 null 时按钮根本不渲染）。
+        val isNetworkSource = remember { successState.source.id == NetworkSource.ID }
+        // SY <--
 
         LaunchedEffect(successState.manga, screenModel.source) {
             if (isHttpSource) {
@@ -176,7 +186,7 @@ class MangaScreen(
                         successState.mergedData,
                     )
                 }
-            }.takeIf { isHttpSource },
+            }.takeIf { isHttpSource && !isNetworkSource },
             // SY <--
             onWebViewLongClicked = {
                 copyMangaUrl(
@@ -184,7 +194,7 @@ class MangaScreen(
                     screenModel.manga,
                     screenModel.source,
                 )
-            }.takeIf { isHttpSource },
+            }.takeIf { isHttpSource && !isNetworkSource },
             onTrackingClicked = {
                 if (!successState.hasLoggedInTrackers) {
                     navigator.push(SettingsScreen(SettingsScreen.Destination.Tracking))
@@ -227,6 +237,10 @@ class MangaScreen(
             },
             onMorePreviewsClicked = { openMorePagePreviews(navigator, successState.manga) },
             // SY <--
+            onSourceSettingsClicked = {
+                screenModel.source?.let { navigator.push(SourcePreferencesScreen(it.id)) }
+                Unit
+            }.takeIf { isHttpSource },
             onMultiBookmarkClicked = screenModel::bookmarkChapters,
             onMultiMarkAsReadClicked = screenModel::markChaptersRead,
             onMarkPreviousAsReadClicked = screenModel::markPreviousChapterRead,
@@ -374,6 +388,14 @@ class MangaScreen(
     }
 
     private fun openChapter(context: Context, chapter: Chapter) {
+        // SY -->
+        // 「未上传」的章节在服务器上没有内容：不要打开阅读器（那只会转一圈报错），
+        // 直接提示「无数据」。「继续阅读」按钮也走这里，所以拦一处就够。
+        if (chapter.url.isPendingChapterUrl()) {
+            context.toast(SYMR.strings.chapter_no_data)
+            return
+        }
+        // SY <--
         context.startActivity(ReaderActivity.newIntent(context, chapter.mangaId, chapter.id))
     }
 

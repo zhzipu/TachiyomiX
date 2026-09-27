@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,6 +39,9 @@ import cafe.adriel.voyager.navigator.tab.TabNavigator
 import eu.kanade.core.preference.asState
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.browse.components.IndexBarEdgeHint
+import eu.kanade.presentation.browse.components.LocalIndexBarBottomBarVisible
+import eu.kanade.presentation.browse.components.LocalIndexBarBottomOverlay
 import eu.kanade.presentation.util.Screen
 import eu.kanade.presentation.util.isTabletUi
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
@@ -92,6 +96,13 @@ object HomeScreen : Screen() {
         val alwaysShowLabel by remember {
             Injekt.get<UiPreferences>().bottomBarLabels.asState(scope)
         }
+        // 书架索引条拖动时底部导航栏的"下移"遮罩状态（内容区写入、底部栏读取）
+        val indexBarBottomOverlay = remember { mutableStateOf(false) }
+        // 底部栏是否正在显示：平板布局没有底部栏（导航在左侧栏），或导航栏被滚动隐藏时，
+        // 列表需要自己绘制"下移"区域
+        val bottomNavVisible by produceState(initialValue = true) {
+            showBottomNavEvent.receiveAsFlow().collectLatest { value = it }
+        }
         // SY <--
 
         TabNavigator(
@@ -99,7 +110,15 @@ object HomeScreen : Screen() {
             key = TabNavigatorKey,
         ) { tabNavigator ->
             // Provide usable navigator to content screen
-            CompositionLocalProvider(LocalNavigator provides navigator) {
+            CompositionLocalProvider(
+                LocalNavigator provides navigator,
+                // SY -->
+                // 书架索引条拖动时底部导航栏的"下移"遮罩状态（内容区写入、底部栏读取）
+                LocalIndexBarBottomOverlay provides indexBarBottomOverlay,
+                // 没有底部栏时（平板布局或导航栏隐藏），列表自己画"下移"区域
+                LocalIndexBarBottomBarVisible provides (!isTabletUi() && bottomNavVisible),
+                // SY <--
+            ) {
                 Scaffold(
                     startBar = {
                         if (isTabletUi()) {
@@ -116,15 +135,25 @@ object HomeScreen : Screen() {
                     },
                     bottomBar = {
                         if (!isTabletUi()) {
-                            val bottomNavVisible by produceState(initialValue = true) {
-                                showBottomNavEvent.receiveAsFlow().collectLatest { value = it }
-                            }
                             AnimatedVisibility(
                                 visible = bottomNavVisible,
                                 enter = expandVertically(),
                                 exit = shrinkVertically(),
                             ) {
-                                NavigationBar {
+                                NavigationBar(
+                                    // SY -->
+                                    overlay = {
+                                        if (indexBarBottomOverlay.value) {
+                                            IndexBarEdgeHint(
+                                                text = "下移",
+                                                // 用 matchParentSize 只盖住导航栏本身，
+                                                // 否则 fillMaxSize 会撑满整屏
+                                                modifier = Modifier.matchParentSize(),
+                                            )
+                                        }
+                                    },
+                                    // SY <--
+                                ) {
                                     TABS
                                         // SY -->
                                         .fastFilter { it.isEnabled() }

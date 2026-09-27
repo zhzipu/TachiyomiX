@@ -25,6 +25,7 @@ import tachiyomi.data.manga.MangaMergeRepositoryImpl
 import tachiyomi.data.manga.MangaMetadataRepositoryImpl
 import tachiyomi.data.source.FeedSavedSearchRepositoryImpl
 import tachiyomi.data.source.SavedSearchRepositoryImpl
+import tachiyomi.data.source.SearchHistoryRepositoryImpl
 import tachiyomi.domain.chapter.interactor.DeleteChapters
 import tachiyomi.domain.chapter.interactor.GetChapterByUrl
 import tachiyomi.domain.chapter.interactor.GetMergedChaptersByMangaId
@@ -58,6 +59,7 @@ import tachiyomi.domain.manga.repository.CustomMangaRepository
 import tachiyomi.domain.manga.repository.FavoritesEntryRepository
 import tachiyomi.domain.manga.repository.MangaMergeRepository
 import tachiyomi.domain.manga.repository.MangaMetadataRepository
+import tachiyomi.domain.source.interactor.ClearSearchHistory
 import tachiyomi.domain.source.interactor.CountFeedSavedSearchBySourceId
 import tachiyomi.domain.source.interactor.CountFeedSavedSearchGlobal
 import tachiyomi.domain.source.interactor.DeleteFeedSavedSearchById
@@ -68,10 +70,13 @@ import tachiyomi.domain.source.interactor.GetSavedSearchById
 import tachiyomi.domain.source.interactor.GetSavedSearchBySourceId
 import tachiyomi.domain.source.interactor.GetSavedSearchBySourceIdFeed
 import tachiyomi.domain.source.interactor.GetSavedSearchGlobalFeed
+import tachiyomi.domain.source.interactor.GetSearchHistory
 import tachiyomi.domain.source.interactor.InsertFeedSavedSearch
 import tachiyomi.domain.source.interactor.InsertSavedSearch
+import tachiyomi.domain.source.interactor.InsertSearchHistory
 import tachiyomi.domain.source.repository.FeedSavedSearchRepository
 import tachiyomi.domain.source.repository.SavedSearchRepository
+import tachiyomi.domain.source.repository.SearchHistoryRepository
 import tachiyomi.domain.track.interactor.IsTrackUnfollowed
 import uy.kohesive.injekt.api.InjektRegistrar
 import xyz.nulldev.ts.api.http.serializer.FilterSerializer
@@ -138,6 +143,11 @@ class SYDomainModule : InjektModule {
         addFactory { DeleteSavedSearchById(get()) }
         addFactory { InsertSavedSearch(get()) }
         addFactory { GetExhSavedSearch(get(), get(), get()) }
+
+        addSingletonFactory<SearchHistoryRepository> { SearchHistoryRepositoryImpl(get()) }
+        addFactory { InsertSearchHistory(get()) }
+        addFactory { GetSearchHistory(get()) }
+        addFactory { ClearSearchHistory(get()) }
 
         addSingletonFactory<FeedSavedSearchRepository> { FeedSavedSearchRepositoryImpl(get()) }
         addFactory { InsertFeedSavedSearch(get()) }

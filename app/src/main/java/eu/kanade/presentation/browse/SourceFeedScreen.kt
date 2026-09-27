@@ -96,6 +96,9 @@ fun SourceFeedScreen(
     searchQuery: String?,
     onSearchQueryChange: (String?) -> Unit,
     getMangaState: @Composable (Manga) -> State<Manga>,
+    searchHistory: List<String> = emptyList(),
+    onSearchHistoryClick: (String) -> Unit = {},
+    onClearSearchHistory: (() -> Unit)? = null,
 ) {
     Scaffold(
         topBar = { scrollBehavior ->
@@ -105,6 +108,9 @@ fun SourceFeedScreen(
                 onSearchQueryChange = onSearchQueryChange,
                 scrollBehavior = scrollBehavior,
                 onClickSearch = onClickSearch,
+                searchHistory = searchHistory,
+                onSearchHistoryClick = onSearchHistoryClick,
+                onClearSearchHistory = onClearSearchHistory,
             )
         },
         floatingActionButton = {
@@ -213,6 +219,9 @@ fun SourceFeedToolbar(
     onSearchQueryChange: (String?) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior,
     onClickSearch: (String) -> Unit,
+    searchHistory: List<String> = emptyList(),
+    onSearchHistoryClick: (String) -> Unit = {},
+    onClearSearchHistory: (() -> Unit)? = null,
 ) {
     SearchToolbar(
         titleContent = { AppBarTitle(title) },
@@ -222,5 +231,8 @@ fun SourceFeedToolbar(
         onClickCloseSearch = { onSearchQueryChange(null) },
         scrollBehavior = scrollBehavior,
         placeholderText = stringResource(MR.strings.action_search_hint),
+        searchHistory = searchHistory,
+        onSearchHistoryClick = onSearchHistoryClick,
+        onClearSearchHistory = onClearSearchHistory,
     )
 }

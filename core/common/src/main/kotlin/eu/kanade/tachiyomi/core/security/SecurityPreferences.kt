@@ -39,6 +39,9 @@ class SecurityPreferences(
     val encryptionType: Preference<EncryptionType> = preferenceStore.getEnum("encryption_type", EncryptionType.AES_256)
 
     val cbzPassword: Preference<String> = preferenceStore.getString(Preference.appStateKey("cbz_password"), "")
+
+    /** 桌面伪装入口的别名组件名；空值表示使用默认启动器别名。 */
+    val fakeLauncherIcon: Preference<String> = preferenceStore.getString("fake_launcher_icon", "")
     // SY <--
 
     /**

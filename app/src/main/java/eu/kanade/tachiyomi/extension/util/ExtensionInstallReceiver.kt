@@ -9,7 +9,9 @@ import androidx.core.net.toUri
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.LoadResult
+import eu.kanade.tachiyomi.modelpack.ModelPackManager
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import logcat.LogPriority
@@ -45,6 +47,11 @@ internal class ExtensionInstallReceiver(private val listener: Listener) : Broadc
      */
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent == null) return
+
+        // 模型包同样通过系统安装器安装/卸载，包变化后需要重新扫描模型包注册表
+        scope.launch(Dispatchers.IO) {
+            ModelPackManager.refresh(context.applicationContext)
+        }
 
         when (intent.action) {
             Intent.ACTION_PACKAGE_ADDED, ACTION_EXTENSION_ADDED -> {

@@ -72,6 +72,9 @@ fun VerticalFastScroller(
     topContentPadding: Dp = Dp.Hairline,
     bottomContentPadding: Dp = Dp.Hairline,
     endContentPadding: Dp = Dp.Hairline,
+    scrollAtStart: Boolean = false,
+    startContentPadding: Dp = Dp.Hairline,
+    hideScrollbar: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     SubcomposeLayout(modifier = modifier) { constraints ->
@@ -177,7 +180,7 @@ fun VerticalFastScroller(
                 scrolled
                     .sample(0.1.seconds)
                     .collectLatest {
-                        if (thumbAllowed()) {
+                        if (thumbAllowed() && !hideScrollbar) {
                             alpha.snapTo(1f)
                             delay(ScrollBarVisibilityDuration)
                             alpha.animateTo(0f, animationSpec = ImmediateFadeOutAnimationSpec)
@@ -185,6 +188,11 @@ fun VerticalFastScroller(
                             alpha.animateTo(0f, animationSpec = ImmediateFadeOutAnimationSpec)
                         }
                     }
+            }
+            LaunchedEffect(hideScrollbar) {
+                if (hideScrollbar) {
+                    alpha.animateTo(0f, animationSpec = ImmediateFadeOutAnimationSpec)
+                }
             }
 
             Box(
@@ -217,8 +225,6 @@ fun VerticalFastScroller(
                         },
                     )
                     .height(ThumbLength)
-                    .padding(horizontal = 8.dp)
-                    .padding(end = endContentPadding)
                     .width(ThumbThickness)
                     .alpha(alpha.value)
                     .background(color = thumbColor, shape = ThumbShape),
@@ -231,7 +237,7 @@ fun VerticalFastScroller(
                 it.place(0, 0)
             }
             scrollerPlaceable.fastForEach {
-                it.placeRelative(contentWidth - scrollerWidth, 0)
+                it.placeRelative(if (scrollAtStart) 0 else contentWidth - scrollerWidth, 0)
             }
         }
     }
@@ -284,6 +290,9 @@ fun VerticalGridFastScroller(
     topContentPadding: Dp = Dp.Hairline,
     bottomContentPadding: Dp = Dp.Hairline,
     endContentPadding: Dp = Dp.Hairline,
+    scrollAtStart: Boolean = false,
+    startContentPadding: Dp = Dp.Hairline,
+    hideScrollbar: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val slotSizesSums = rememberColumnWidthSums(
@@ -367,7 +376,7 @@ fun VerticalGridFastScroller(
                 scrolled
                     .sample(0.1.seconds)
                     .collectLatest {
-                        if (thumbAllowed()) {
+                        if (thumbAllowed() && !hideScrollbar) {
                             alpha.snapTo(1f)
                             delay(ScrollBarVisibilityDuration)
                             alpha.animateTo(0f, animationSpec = ImmediateFadeOutAnimationSpec)
@@ -375,6 +384,11 @@ fun VerticalGridFastScroller(
                             alpha.animateTo(0f, animationSpec = ImmediateFadeOutAnimationSpec)
                         }
                     }
+            }
+            LaunchedEffect(hideScrollbar) {
+                if (hideScrollbar) {
+                    alpha.animateTo(0f, animationSpec = ImmediateFadeOutAnimationSpec)
+                }
             }
 
             Box(
@@ -407,7 +421,6 @@ fun VerticalGridFastScroller(
                         },
                     )
                     .height(ThumbLength)
-                    .padding(end = endContentPadding)
                     .width(ThumbThickness)
                     .alpha(alpha.value)
                     .background(color = thumbColor, shape = ThumbShape),
@@ -420,7 +433,7 @@ fun VerticalGridFastScroller(
                 it.place(0, 0)
             }
             scrollerPlaceable.fastForEach {
-                it.placeRelative(contentWidth - scrollerWidth, 0)
+                it.placeRelative(if (scrollAtStart) 0 else contentWidth - scrollerWidth, 0)
             }
         }
     }

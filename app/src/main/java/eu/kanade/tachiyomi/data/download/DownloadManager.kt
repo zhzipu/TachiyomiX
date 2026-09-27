@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.download
 import android.content.Context
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.download.model.Download
+import eu.kanade.tachiyomi.data.upload.DownloadCategory
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.util.storage.DiskUtil
@@ -45,7 +46,17 @@ class DownloadManager(
     private val getCategories: GetCategories = Injekt.get(),
     private val sourceManager: SourceManager = Injekt.get(),
     private val downloadPreferences: DownloadPreferences = Injekt.get(),
+    // SY --> 书架常驻的「下载」分类
+    private val downloadCategory: DownloadCategory = Injekt.get(),
+    // 删除下载时联动停止上传（见 deleteChapters / deleteManga）。
+    // `UploadManager` 自己也依赖 `DownloadManager`，所以这里必须**懒取**，
+    // 构造期直接 Injekt.get 会成环。
+    // SY <--
 ) {
+
+    // SY -->
+    private val uploadManager by lazy { Injekt.get<eu.kanade.tachiyomi.data.upload.UploadManager>() }
+    // SY <--
 
     /**
      * Downloader whose only task is to download chapters.
@@ -138,6 +149,16 @@ class DownloadManager(
      * @param autoStart whether to start the downloader after enqueing the chapters.
      */
     fun downloadChapters(manga: Manga, chapters: List<Chapter>, autoStart: Boolean = true) {
+        // SY -->
+        // 发起下载即把漫画**追加**到书架「下载」分类下（幂等）。
+        // 是「复制」不是「移动」：漫画原来所属的分类全部保留（包括只在「默认」里的那种），
+        // 细节见 DownloadCategory.addManga 的注释。
+        // 挂在这里是因为所有下载入口最终都收敛到这个方法：详情页、书架多选、章节行、
+        // 更新页、通知栏「下载新章节」、书架自动更新任务、合并图源。
+        if (chapters.isNotEmpty()) {
+            launchIO { downloadCategory.addManga(manga.id) }
+        }
+        // SY <--
         downloader.queueChapters(manga, chapters, autoStart)
     }
 
@@ -244,6 +265,21 @@ class DownloadManager(
             chapterDirs.forEach { it.delete() }
             cache.removeChapters(filteredChapters, manga)
 
+            // SY -->
+            // 本地下载被删光 → 这本漫画离开书架「下载」分类。
+            // 这是「下载」成员关系的**唯一出口**：用户手动改分类是去不掉它的
+            // （见 DownloadCategory.resolveUserSelection），删掉下载才是。
+            val nothingLeft = getDownloadCount(manga) == 0
+            if (nothingLeft) {
+                downloadCategory.removeManga(manga.id)
+            }
+
+            // 需求：正在上传/下载的任务，在「下载」里删掉时自动停止上传并清空任务。
+            // 还在队列里 / 正在传的那几话要立刻撤下来 —— 本地图都没了，再传上去
+            // 只会把服务器上的内容覆盖成半截或者传空。
+            uploadManager.cancelUploadsOfManga(manga.id, keepDownloaded = !nothingLeft)
+            // SY <--
+
             // Delete manga directory if empty
             if (mangaDir?.listFiles()?.isEmpty() == true) {
                 deleteManga(manga, source, removeQueued = false)
@@ -265,6 +301,15 @@ class DownloadManager(
             }
             provider.findMangaDir(/* SY --> */ manga.ogTitle /* SY <-- */, source)?.delete()
             cache.removeManga(manga)
+
+            // SY -->
+            // 整个下载目录都没了 → 一并离开书架「下载」分类。
+            // 幂等：`deleteChapters` 删空目录时也会转到这里，重复调用无副作用。
+            downloadCategory.removeManga(manga.id)
+
+            // 整个漫画的下载都没了：这本的上传任务全部作废（队列 + 正在传的都停掉）
+            uploadManager.cancelUploadsOfManga(manga.id, keepDownloaded = false)
+            // SY <--
 
             // Delete source directory if empty
             val sourceDir = provider.findSourceDir(source)

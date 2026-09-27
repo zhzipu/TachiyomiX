@@ -67,11 +67,14 @@ import eu.kanade.tachiyomi.data.export.LibraryExporter
 import eu.kanade.tachiyomi.data.export.LibraryExporter.ExportOptions
 import eu.kanade.tachiyomi.data.sync.SyncDataJob
 import eu.kanade.tachiyomi.data.sync.SyncManager
+import eu.kanade.tachiyomi.data.sync.service.AliyunPanSyncService
 import eu.kanade.tachiyomi.data.sync.service.GoogleDriveService
 import eu.kanade.tachiyomi.data.sync.service.GoogleDriveSyncService
 import eu.kanade.tachiyomi.data.sync.service.WebDavSyncService
+import eu.kanade.tachiyomi.ui.setting.track.AliyunPanQrLoginActivity
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.toast
+import eu.kanade.tachiyomi.util.waifu2x.ImageEnhancementCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import logcat.LogPriority
@@ -308,6 +311,12 @@ object SettingsDataScreen : SearchableSettings {
         val pagePreviewCache = remember { Injekt.get<PagePreviewCache>() }
         var pagePreviewReadableSizeSema by remember { mutableIntStateOf(0) }
         val pagePreviewReadableSize = remember(pagePreviewReadableSizeSema) { pagePreviewCache.readableSize }
+
+        // 图像增强（AI 放大）结果缓存：不随退出阅读器/启动自动清理，只能在这里手动清除
+        var enhancementCacheReadableSizeSema by remember { mutableIntStateOf(0) }
+        val enhancementCacheReadableSize = remember(enhancementCacheReadableSizeSema) {
+            ImageEnhancementCache.readableSize(context)
+        }
         // SY <--
 
         return Preference.PreferenceGroup(
@@ -324,6 +333,25 @@ object SettingsDataScreen : SearchableSettings {
                         },
                     )
                 },
+
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_clear_image_enhancement_cache),
+                    subtitle = stringResource(MR.strings.used_cache, enhancementCacheReadableSize),
+                    onClick = {
+                        scope.launchNonCancellable {
+                            try {
+                                val deletedFiles = ImageEnhancementCache.clear(context)
+                                withUIContext {
+                                    context.toast(context.stringResource(MR.strings.cache_deleted, deletedFiles))
+                                    enhancementCacheReadableSizeSema++
+                                }
+                            } catch (e: Throwable) {
+                                logcat(LogPriority.ERROR, e)
+                                withUIContext { context.toast(MR.strings.cache_delete_error) }
+                            }
+                        }
+                    },
+                ),
 
                 Preference.PreferenceItem.TextPreference(
                     title = stringResource(MR.strings.pref_clear_chapter_cache),
@@ -523,6 +551,7 @@ object SettingsDataScreen : SearchableSettings {
                             SyncManager.SyncService.SYNCYOMI.value to stringResource(SYMR.strings.syncyomi),
                             SyncManager.SyncService.GOOGLE_DRIVE.value to stringResource(SYMR.strings.google_drive),
                             SyncManager.SyncService.WEBDAV.value to stringResource(SYMR.strings.webdav),
+                            SyncManager.SyncService.ALIYUN_PAN.value to stringResource(SYMR.strings.aliyun_pan),
                         ),
                         onValueChanged = { true },
                     ),
@@ -555,6 +584,7 @@ object SettingsDataScreen : SearchableSettings {
             SyncManager.SyncService.SYNCYOMI -> getSelfHostPreferences(syncPreferences)
             SyncManager.SyncService.GOOGLE_DRIVE -> getGoogleDrivePreferences()
             SyncManager.SyncService.WEBDAV -> getWebDavPreferences()
+            SyncManager.SyncService.ALIYUN_PAN -> getAliyunPanPreferences()
         }
 
         return if (syncServiceType != SyncManager.SyncService.NONE) {
@@ -664,7 +694,38 @@ object SettingsDataScreen : SearchableSettings {
                 subtitle = null,
                 preference = syncPreferences.webDavPassword,
             ),
+            getWebDavConnectionTest(),
             getWebDavPurge(),
+        )
+    }
+
+    @Composable
+    private fun getWebDavConnectionTest(): Preference.PreferenceItem.TextPreference {
+        val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+        val webDavSync = remember { WebDavSyncService(context) }
+
+        return Preference.PreferenceItem.TextPreference(
+            title = stringResource(SYMR.strings.pref_webdav_test_connection),
+            onClick = {
+                scope.launch {
+                    val result = webDavSync.testConnection()
+                    when (result) {
+                        WebDavSyncService.ConnectionTestStatus.NOT_CONFIGURED -> context.toast(
+                            SYMR.strings.webdav_not_configured,
+                            duration = 5000,
+                        )
+                        WebDavSyncService.ConnectionTestStatus.SUCCESS -> context.toast(
+                            SYMR.strings.webdav_connection_test_success,
+                            duration = 5000,
+                        )
+                        WebDavSyncService.ConnectionTestStatus.FAILED -> context.toast(
+                            SYMR.strings.webdav_connection_test_failed,
+                            duration = 10000,
+                        )
+                    }
+                }
+            },
         )
     }
 
@@ -708,6 +769,113 @@ object SettingsDataScreen : SearchableSettings {
 
         return Preference.PreferenceItem.TextPreference(
             title = stringResource(SYMR.strings.pref_webdav_purge_sync_data),
+            onClick = { showPurgeDialog = true },
+        )
+    }
+
+    @Composable
+    private fun getAliyunPanPreferences(): List<Preference> {
+        val syncPreferences = remember { Injekt.get<SyncPreferences>() }
+        val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+
+        return listOf(
+            Preference.PreferenceItem.TextPreference(
+                title = stringResource(SYMR.strings.pref_aliyun_pan_sign_in),
+                subtitle = stringResource(SYMR.strings.pref_aliyun_pan_sign_in_summ),
+                onClick = {
+                    context.startActivity(AliyunPanQrLoginActivity.newIntent(context))
+                },
+            ),
+            Preference.PreferenceItem.EditTextPreference(
+                title = stringResource(SYMR.strings.pref_aliyun_pan_refresh_token),
+                subtitle = stringResource(SYMR.strings.pref_aliyun_pan_refresh_token_summ),
+                preference = syncPreferences.aliyunPanRefreshToken,
+                onValueChanged = { newValue ->
+                    scope.launch {
+                        // New token means the previously cached access token / session is stale.
+                        syncPreferences.aliyunPanRefreshToken.set(newValue.trim())
+                        syncPreferences.aliyunPanAccessToken.set("")
+                        syncPreferences.aliyunPanTokenExpireTime.set(0L)
+                    }
+                    true
+                },
+            ),
+            getAliyunPanConnectionTest(),
+            getAliyunPanPurge(),
+        )
+    }
+
+    @Composable
+    private fun getAliyunPanConnectionTest(): Preference.PreferenceItem.TextPreference {
+        val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+        val aliyunPanSync = remember { AliyunPanSyncService(context) }
+
+        return Preference.PreferenceItem.TextPreference(
+            title = stringResource(SYMR.strings.pref_aliyun_pan_test_connection),
+            onClick = {
+                scope.launch {
+                    val result = aliyunPanSync.testConnection()
+                    when (result) {
+                        AliyunPanSyncService.ConnectionTestStatus.NOT_CONFIGURED -> context.toast(
+                            SYMR.strings.aliyun_pan_not_configured,
+                            duration = 5000,
+                        )
+                        AliyunPanSyncService.ConnectionTestStatus.SUCCESS -> context.toast(
+                            SYMR.strings.aliyun_pan_connection_test_success,
+                            duration = 5000,
+                        )
+                        AliyunPanSyncService.ConnectionTestStatus.FAILED -> context.toast(
+                            SYMR.strings.aliyun_pan_connection_test_failed,
+                            duration = 10000,
+                        )
+                    }
+                }
+            },
+        )
+    }
+
+    @Composable
+    private fun getAliyunPanPurge(): Preference.PreferenceItem.TextPreference {
+        val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+        val aliyunPanSync = remember { AliyunPanSyncService(context) }
+        var showPurgeDialog by remember { mutableStateOf(false) }
+
+        if (showPurgeDialog) {
+            PurgeConfirmationDialog(
+                message = stringResource(SYMR.strings.pref_purge_confirmation_aliyun_pan_message),
+                onConfirm = {
+                    showPurgeDialog = false
+                    scope.launch {
+                        val result = aliyunPanSync.deleteSyncDataFromAliyunPan()
+                        when (result) {
+                            AliyunPanSyncService.DeleteSyncDataStatus.NOT_CONFIGURED -> context.toast(
+                                SYMR.strings.aliyun_pan_not_configured,
+                                duration = 5000,
+                            )
+                            AliyunPanSyncService.DeleteSyncDataStatus.NO_FILES -> context.toast(
+                                SYMR.strings.aliyun_pan_sync_data_not_found,
+                                duration = 5000,
+                            )
+                            AliyunPanSyncService.DeleteSyncDataStatus.SUCCESS -> context.toast(
+                                SYMR.strings.aliyun_pan_sync_data_purged,
+                                duration = 5000,
+                            )
+                            AliyunPanSyncService.DeleteSyncDataStatus.ERROR -> context.toast(
+                                SYMR.strings.aliyun_pan_sync_data_purge_error,
+                                duration = 10000,
+                            )
+                        }
+                    }
+                },
+                onDismissRequest = { showPurgeDialog = false },
+            )
+        }
+
+        return Preference.PreferenceItem.TextPreference(
+            title = stringResource(SYMR.strings.pref_aliyun_pan_purge_sync_data),
             onClick = { showPurgeDialog = true },
         )
     }

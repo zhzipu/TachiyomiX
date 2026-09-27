@@ -22,6 +22,8 @@ fun MigrateSearchScreen(
     onClickSource: (Source) -> Unit,
     onClickItem: (Manga) -> Unit,
     onLongClickItem: (Manga) -> Unit,
+    onSearchHistoryClick: (String) -> Unit = {},
+    onClearSearchHistory: (() -> Unit)? = null,
 ) {
     Scaffold(
         topBar = { scrollBehavior ->
@@ -38,6 +40,9 @@ fun MigrateSearchScreen(
                 onlyShowHasResults = state.onlyShowHasResults,
                 onToggleResults = onToggleResults,
                 scrollBehavior = scrollBehavior,
+                searchHistory = state.searchHistory,
+                onSearchHistoryClick = onSearchHistoryClick,
+                onClearSearchHistory = onClearSearchHistory,
             )
         },
     ) { paddingValues ->

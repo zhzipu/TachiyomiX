@@ -237,6 +237,17 @@ class LibraryPreferences(
 
     val groupLibraryBy: Preference<Int> = preferenceStore.getInt("group_library_by", LibraryGroup.BY_DEFAULT)
 
+    val indexBarPosition: Preference<IndexBarPosition> = preferenceStore.getEnum(
+        "pref_library_index_bar_position",
+        IndexBarPosition.LEFT,
+    )
+
+    enum class IndexBarPosition {
+        LEFT,
+        RIGHT,
+        OFF,
+    }
+
     // SY <--
 
     companion object {

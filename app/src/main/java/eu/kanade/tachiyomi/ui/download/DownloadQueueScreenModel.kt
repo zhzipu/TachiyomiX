@@ -6,6 +6,9 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.download.model.Download
+// SY -->
+import eu.kanade.tachiyomi.data.upload.UploadManager
+// SY <--
 import eu.kanade.tachiyomi.databinding.DownloadListBinding
 import eu.kanade.tachiyomi.source.model.Page
 import kotlinx.coroutines.Job
@@ -27,6 +30,9 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class DownloadQueueScreenModel(
     private val downloadManager: DownloadManager = Injekt.get(),
+    // SY -->
+    private val uploadManager: UploadManager = Injekt.get(),
+    // SY <--
 ) : ScreenModel {
 
     private val _state = MutableStateFlow(emptyList<DownloadHeaderItem>())
@@ -153,6 +159,48 @@ class DownloadQueueScreenModel(
     fun pauseDownloads() {
         downloadManager.pauseDownloads()
     }
+
+    // SY -->
+    /**
+     * 「继续」/「暂停」弹窗里选的「下载和上传」之外的两项用的。
+     *
+     * [downloadManager.startDownloads] 在没有任何排队任务时是空操作 —— 不能靠它来
+     * 「把暂停的下载器唤醒」，所以这里先 `startDownloads()` 让 `pause()` 留下的
+     * QUEUE 条目重新跑起来，再由 upload 侧各管各的。
+     */
+    fun resumeDownloadsOnly() {
+        downloadManager.startDownloads()
+    }
+
+    fun resumeUploadsOnly() {
+        uploadManager.startUploads()
+    }
+
+    /** 「继续」弹窗里选「下载和上传」。 */
+    fun resumeDownloadsAndUploads() {
+        downloadManager.startDownloads()
+        uploadManager.startUploads()
+    }
+
+    /** 「暂停」弹窗里选「下载」。 */
+    fun pauseDownloadsOnly() {
+        downloadManager.pauseDownloads()
+    }
+
+    /** 「暂停」弹窗里选「上传」。 */
+    fun pauseUploadsOnly() {
+        uploadManager.pauseUploads()
+    }
+
+    /** 「暂停」弹窗里选「下载和上传」。 */
+    fun pauseDownloadsAndUploads() {
+        downloadManager.pauseDownloads()
+        uploadManager.pauseUploads()
+    }
+
+    val isUploaderRunning = uploadManager.isUploaderRunning
+        .stateIn(screenModelScope, SharingStarted.WhileSubscribed(5000), false)
+    // SY <--
 
     fun clearQueue() {
         downloadManager.clearQueue()

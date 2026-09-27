@@ -51,10 +51,19 @@ class SourceFeedScreen(val sourceId: Long) : Screen() {
             onClickSavedSearch = { onSavedSearchClick(navigator, screenModel.source, it) },
             onClickDelete = screenModel::openDeleteFeed,
             onClickManga = { onMangaClick(navigator, it) },
-            onClickSearch = { onSearchClick(navigator, screenModel.source, it) },
+            onClickSearch = {
+                screenModel.search(it)
+                onSearchClick(navigator, screenModel.source, it)
+            },
             searchQuery = state.searchQuery,
-            onSearchQueryChange = screenModel::search,
+            onSearchQueryChange = screenModel::setSearchQuery,
             getMangaState = { screenModel.getManga(initialManga = it) },
+            searchHistory = state.searchHistory,
+            onSearchHistoryClick = {
+                screenModel.search(it)
+                onSearchClick(navigator, screenModel.source, it)
+            },
+            onClearSearchHistory = screenModel::clearSearchHistory,
         )
 
         val onDismissRequest = screenModel::dismissDialog
@@ -145,7 +154,7 @@ class SourceFeedScreen(val sourceId: Long) : Screen() {
         }
 
         BackHandler(state.searchQuery != null) {
-            screenModel.search(null)
+            screenModel.setSearchQuery(null)
         }
     }
 

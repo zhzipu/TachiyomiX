@@ -11,27 +11,42 @@ import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.View.LAYER_TYPE_HARDWARE
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.addCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,7 +54,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.getSystemService
 import androidx.core.graphics.Insets
 import androidx.core.net.toUri
@@ -61,12 +78,16 @@ import eu.kanade.presentation.reader.OrientationSelectDialog
 import eu.kanade.presentation.reader.ReaderContentOverlay
 import eu.kanade.presentation.reader.ReaderPageActionsDialog
 import eu.kanade.presentation.reader.ReaderPageIndicator
+import eu.kanade.presentation.reader.ReaderProcessingStatusIndicator
+import eu.kanade.presentation.reader.ReaderSystemTimeIndicator
 import eu.kanade.presentation.reader.ReadingModeSelectDialog
 import eu.kanade.presentation.reader.appbars.ReaderAppBars
 import eu.kanade.presentation.reader.components.ChapterNavigatorType
+import eu.kanade.presentation.reader.settings.EnhancementSettingsDialog
 import eu.kanade.presentation.reader.settings.ReaderSettingsDialog
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
+import eu.kanade.tachiyomi.modelpack.ModelPackManager
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.databinding.ReaderActivityBinding
@@ -79,12 +100,18 @@ import eu.kanade.tachiyomi.ui.reader.ReaderViewModel.SetAsCoverResult.Error
 import eu.kanade.tachiyomi.ui.reader.ReaderViewModel.SetAsCoverResult.Success
 import eu.kanade.tachiyomi.ui.reader.loader.HttpPageLoader
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
+import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
+import eu.kanade.tachiyomi.ui.reader.spatial.DepthSpatialModel
+import eu.kanade.tachiyomi.ui.reader.spatial.DepthSpatialPipeline
+import eu.kanade.tachiyomi.ui.reader.spatial.SpatialDepthSceneIO
+import eu.kanade.tachiyomi.ui.reader.spatial.SpatialSceneControlsView
+import eu.kanade.tachiyomi.ui.reader.spatial.SpatialSceneView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerConfig
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
@@ -96,10 +123,14 @@ import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.view.setComposeContent
+import eu.kanade.tachiyomi.util.waifu2x.ImageEnhancer
+import eu.kanade.tachiyomi.util.waifu2x.Waifu2x
 import exh.source.isEhBasedSource
 import exh.ui.ifSourcesLoaded
 import exh.util.defaultReaderType
 import exh.util.mangaType
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -111,6 +142,7 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import tachiyomi.core.common.Constants
 import tachiyomi.core.common.i18n.pluralStringResource
@@ -126,6 +158,7 @@ import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayOutputStream
+import java.util.Locale
 import kotlin.time.Duration.Companion.seconds
 
 class ReaderActivity : BaseActivity() {
@@ -182,6 +215,35 @@ class ReaderActivity : BaseActivity() {
     var isScrollingThroughPages = false
         private set
 
+    // SY -->
+    // 空间深度（立体视差）阅读状态：与参考实现一致，全部保存在 Activity 内
+    private val spatialPipeline by lazy { DepthSpatialPipeline(applicationContext) }
+    private val spatialModel by lazy { DepthSpatialModel(applicationContext) }
+    private var spatialSceneView: SpatialSceneView? = null
+    private var spatialSceneContainer: FrameLayout? = null
+    private var spatialSceneControls: SpatialSceneControlsView? = null
+    private var spatialSceneControlsContainer: View? = null
+    private var spatialEdgeExpandButton: View? = null
+    private var spatialSceneJob: Job? = null
+    private var spatialScenePageKey: Pair<Long?, Int>? = null
+    private var spatialMotionSensitivity = 1f
+    private var spatialDepthStrength = 1f
+    private var spatialRotationAngleX = 7.9f
+    private var spatialRotationAngleY = 6.2f
+    private var spatialRotationAngleZ = 4.5f
+
+    // 当前页是否为「双页/跨页」显示；空间深度仅支持单页，用于给出明确提示
+    private var currentPageHasExtraPage = false
+    private var spatialSceneActive by mutableStateOf(false)
+    private var spatialSceneBusy by mutableStateOf(false)
+
+    /** 生成期间的进度快照，仅在 [spatialSceneBusy] 为 true 时有意义。 */
+    private var spatialProgress by mutableStateOf<DepthSpatialPipeline.Progress?>(null)
+    private var showSpatialModelDownloadDialog by mutableStateOf(false)
+    private var spatialModelDownloadProgress by mutableStateOf<Int?>(null)
+    private var spatialModelCompileHtpVersion by mutableStateOf<Int?>(null)
+    // SY <--
+
     /**
      * Called when the activity is created. Initializes the presenter and configuration.
      */
@@ -209,6 +271,17 @@ class ReaderActivity : BaseActivity() {
         binding = ReaderActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.setComposeOverlay()
+
+        // 空间深度开启时，返回键先关闭立体视差覆盖层，而不是直接退出阅读器
+        onBackPressedDispatcher.addCallback(this) {
+            if (spatialSceneActive || spatialSceneBusy) {
+                hideSpatialScene()
+            } else {
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+                isEnabled = true
+            }
+        }
 
         if (viewModel.needsInit()) {
             val manga = intent.extras?.getLong("manga", -1) ?: -1L
@@ -296,11 +369,22 @@ class ReaderActivity : BaseActivity() {
                 }
             }
             .launchIn(lifecycleScope)
+
+        // 图像增强：开启后预先加载原生库/模型，避免第一次翻页时才初始化
+        if (readerPreferences.waifu2xEnabled().get()) {
+            Waifu2x.init(this, readerPreferences.waifu2xNoiseLevel().get())
+        }
     }
 
     private fun ReaderActivityBinding.setComposeOverlay(): Unit = composeOverlay.setComposeContent {
         val state by viewModel.state.collectAsState()
         val showPageNumber by readerPreferences.showPageNumber.collectAsState()
+        val showSystemTime by readerPreferences.showSystemTime.collectAsState()
+        val showProcessingStatus by readerPreferences.realCuganShowStatus().collectAsState()
+        val imageEnhancementEnabled by readerPreferences.realCuganEnabled().collectAsState()
+        val enhancementStatus by ImageEnhancer.status.collectAsState()
+        // 有无可用 AI 模型包：卸载所有模型包后图像增强不可用，左下角也不应再显示处理状态
+        val enhancementAvailable by remember { ModelPackManager.models }.collectAsState()
         val settingsScreenModel = remember {
             ReaderSettingsScreenModel(
                 readerState = viewModel.state,
@@ -310,19 +394,54 @@ class ReaderActivity : BaseActivity() {
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            if (!state.menuVisible && showPageNumber) {
+            // 底部区域（章节导航 + 底栏）的实际高度，底栏升起时用它把左下角状态抬到上方
+            var bottomBarsHeight by remember { mutableStateOf(0.dp) }
+
+            // 进入阅读器即同步一次已安装模型包列表，确保 enhancementAvailable 正确反映有无插件
+            LaunchedEffect(Unit) {
+                withContext(Dispatchers.IO) {
+                    ModelPackManager.installedModels(applicationContext)
+                }
+            }
+
+            if (!state.menuVisible && showPageNumber && !state.pageIndicatorHidden) {
                 ReaderPageIndicator(
                     currentPage = state.currentPage,
                     totalPages = state.totalPages,
+                    indicatorText = state.pageIndicatorText,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding(),
                 )
             }
 
+            if (!state.menuVisible && showSystemTime) {
+                ReaderSystemTimeIndicator(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding(),
+                )
+            }
+
+            if (showProcessingStatus && imageEnhancementEnabled && enhancementAvailable.isNotEmpty()) {
+                ReaderProcessingStatusIndicator(
+                    status = enhancementStatus,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .then(
+                            if (state.menuVisible && bottomBarsHeight > 0.dp) {
+                                // 底栏升起：整体上移到底栏之上，避免被底栏与其中的进度条遮挡
+                                Modifier.padding(bottom = bottomBarsHeight)
+                            } else {
+                                Modifier.navigationBarsPadding()
+                            },
+                        ),
+                )
+            }
+
             ContentOverlay(state = state)
 
-            AppBars(state = state)
+            AppBars(state = state, onBottomSectionHeightChanged = { bottomBarsHeight = it })
         }
 
         val onDismissRequest = viewModel::closeDialog
@@ -373,6 +492,13 @@ class ReaderActivity : BaseActivity() {
                         menuToggleToast?.cancel()
                         menuToggleToast = toast(stringRes)
                     },
+                )
+            }
+
+            is ReaderViewModel.Dialog.EnhancementSettings -> {
+                EnhancementSettingsDialog(
+                    onDismissRequest = onDismissRequest,
+                    screenModel = settingsScreenModel,
                 )
             }
 
@@ -449,12 +575,101 @@ class ReaderActivity : BaseActivity() {
             // SY <--
             null -> {}
         }
+
+        // 空间深度：深度模型体积较大，需用户确认后再下载
+        if (showSpatialModelDownloadDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (spatialModelDownloadProgress == null) showSpatialModelDownloadDialog = false
+                },
+                title = { Text(stringResource(MR.strings.reader_spatial_scene_download_title)) },
+                text = {
+                    val progress = spatialModelDownloadProgress
+                    if (progress == null) {
+                        Text(stringResource(MR.strings.reader_spatial_scene_download_message))
+                    } else {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator()
+                            Text(stringResource(MR.strings.reader_spatial_scene_downloading, progress))
+                        }
+                    }
+                },
+                confirmButton = {
+                    if (spatialModelDownloadProgress == null) {
+                        TextButton(onClick = ::downloadSpatialModel) {
+                            Text(stringResource(MR.strings.reader_spatial_scene_download))
+                        }
+                    }
+                },
+                dismissButton = {
+                    if (spatialModelDownloadProgress == null) {
+                        TextButton(onClick = { showSpatialModelDownloadDialog = false }) {
+                            Text(stringResource(MR.strings.action_cancel))
+                        }
+                    }
+                },
+            )
+        }
+
+        // 空间深度：生成期间显示阻塞式进度弹窗。弹窗存在时无法操作其他区域，
+        // 只能点「取消」中断，或等生成完成后自动关闭。
+        if (spatialSceneBusy) {
+            val progress = spatialProgress
+            val percent = progress?.percent
+            AlertDialog(
+                onDismissRequest = {},
+                properties = DialogProperties(
+                    dismissOnBackPress = false,
+                    dismissOnClickOutside = false,
+                ),
+                title = { Text(stringResource(MR.strings.reader_spatial_scene_progress_title)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        if (percent != null) {
+                            LinearProgressIndicator(
+                                progress = { percent / 100f },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                        Text(spatialProgressStageText(progress?.stage))
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = ::hideSpatialScene) {
+                        Text(stringResource(MR.strings.action_cancel))
+                    }
+                },
+            )
+        }
+    }
+
+    /** 生成阶段对应的说明文字。 */
+    @Composable
+    private fun spatialProgressStageText(stage: DepthSpatialPipeline.Stage?): String = when (stage) {
+        DepthSpatialPipeline.Stage.WAITING_ENHANCEMENT -> {
+            stringResource(MR.strings.reader_spatial_scene_stage_waiting_enhancement)
+        }
+        DepthSpatialPipeline.Stage.COMPILING -> {
+            stringResource(
+                MR.strings.reader_spatial_scene_compiling,
+                spatialModelCompileHtpVersion?.let { "v$it" } ?: "HTP",
+            )
+        }
+        DepthSpatialPipeline.Stage.INFERRING -> stringResource(MR.strings.reader_spatial_scene_stage_inferring)
+        else -> stringResource(MR.strings.reader_spatial_scene_stage_preparing)
     }
 
     /**
      * Called when the activity is destroyed. Cleans up the viewer, configuration and any view.
      */
     override fun onDestroy() {
+        hideSpatialScene()
         super.onDestroy()
         viewModel.state.value.viewer?.destroy()
         config = null
@@ -463,6 +678,7 @@ class ReaderActivity : BaseActivity() {
     }
 
     override fun onPause() {
+        spatialSceneView?.stopMotion()
         lifecycleScope.launchNonCancellable {
             viewModel.updateHistory()
         }
@@ -475,6 +691,7 @@ class ReaderActivity : BaseActivity() {
      */
     override fun onResume() {
         super.onResume()
+        spatialSceneView?.startMotion()
         viewModel.restartReadTimer()
         setMenuVisibility(viewModel.state.value.menuVisible)
     }
@@ -565,7 +782,10 @@ class ReaderActivity : BaseActivity() {
     }
 
     @Composable
-    fun AppBars(state: ReaderViewModel.State) {
+    fun AppBars(
+        state: ReaderViewModel.State,
+        onBottomSectionHeightChanged: (Dp) -> Unit = {},
+    ) {
         if (!ifSourcesLoaded()) {
             return
         }
@@ -591,6 +811,14 @@ class ReaderActivity : BaseActivity() {
             readerPreferences.readerBottomButtons.changes()
         }.collectAsState(emptySet())
         val dualPageSplitPaged by readerPreferences.dualPageSplitPaged.collectAsState()
+        val imageEnhancementEnabled by readerPreferences.realCuganEnabled().collectAsState()
+        // 有无可用 AI 模型包：无任何模型包时图像增强不可用（底栏图标置灰、开关被禁用）
+        val enhancementAvailable by remember { ModelPackManager.models }.collectAsState()
+        LaunchedEffect(Unit) {
+            withContext(Dispatchers.IO) {
+                ModelPackManager.installedModels(applicationContext)
+            }
+        }
         // SY <--
 
         val verticalNavigatorModes by readerPreferences.verticalNavigator.collectAsState()
@@ -688,7 +916,24 @@ class ReaderActivity : BaseActivity() {
                 }
             },
             onClickShiftPage = ::shiftDoublePages,
+            onLongClickShiftPage = ::invertDoublePages,
+            onClickImageEnhancement = {
+                // 无可用模型包时不允许切换（按钮已置灰）
+                if (enhancementAvailable.isNotEmpty()) {
+                    val enabled = !readerPreferences.realCuganEnabled().get()
+                    readerPreferences.realCuganEnabled().set(enabled)
+                    menuToggleToast?.cancel()
+                    menuToggleToast = toast(if (enabled) MR.strings.on else MR.strings.off)
+                }
+            },
+            imageEnhancementEnabled = imageEnhancementEnabled,
+            enhancementAvailable = enhancementAvailable.isNotEmpty(),
+            onClickEnhancementSettings = viewModel::openEnhancementSettingsDialog,
+            spatialSceneActive = spatialSceneActive,
+            spatialSceneBusy = spatialSceneBusy,
+            onClickSpatialScene = ::toggleSpatialScene,
             // SY <--
+            onBottomSectionHeightChanged = onBottomSectionHeightChanged,
         )
     }
 
@@ -836,6 +1081,19 @@ class ReaderActivity : BaseActivity() {
                 invalidateOptionsMenu()
             }
         }
+    }
+
+    // 长按双页切换按钮 = 反转双页左右顺序（1|2 <-> 2|1）
+    private fun invertDoublePages() {
+        val viewer = viewModel.state.value.viewer as? PagerViewer ?: return
+        if (viewer.currentSpread()?.second == null) return // 非双页显示不做处理
+        val oldInvert = viewer.config.invertDoublePages // 换位前状态：决定动画里哪页在右
+        // 同步切换运行时配置（读双页方向/编号都以它为准）
+        viewer.config.invertDoublePages = !oldInvert
+        // 原位重合并 + 刷新页码（插底层，不清空、不重建，避免黑屏），并播放换位对滑动画
+        viewer.invertCurrentSpread()
+        viewer.animateDoublePageSwap(oldInvert)
+        invalidateOptionsMenu()
     }
 // EXH <--
 
@@ -1053,6 +1311,13 @@ class ReaderActivity : BaseActivity() {
     @SuppressLint("SetTextI18n")
     fun onPageSelected(page: ReaderPage, hasExtraPage: Boolean = false) {
         // SY -->
+        // 翻页后空间深度覆盖层对应的是旧页面，需要先关闭
+        currentPageHasExtraPage = hasExtraPage
+        val selectedKey = page.chapter.chapter.id to page.index
+        if (spatialScenePageKey != null && spatialScenePageKey != selectedKey) {
+            hideSpatialScene()
+        }
+        // SY <--
         val currentPageText = if (hasExtraPage) {
             val invertDoublePage = (viewModel.state.value.viewer as? PagerViewer)?.config?.invertDoublePages ?: false
             if ((resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_LTR) xor
@@ -1065,8 +1330,345 @@ class ReaderActivity : BaseActivity() {
         } else {
             "${page.number}"
         }
-        viewModel.onPageSelected(page, currentPageText, hasExtraPage)
+        // 阅读器内的页数指示器文本：双页跨页时「左页-总页数-右页」（如 1-18-2），
+        // 单页显示（含奇数页单独显示、跨页拆分）留空，走默认的「当前页 / 总页数」
+        val rightPage = (viewModel.state.value.viewer as? PagerViewer)?.currentSpread()?.second
+        val pageIndicatorText = if (hasExtraPage && rightPage != null && rightPage.number != page.number) {
+            val totalPages = page.chapter.pages?.count() ?: 0
+            val invertDoublePage = (viewModel.state.value.viewer as? PagerViewer)?.config?.invertDoublePages ?: false
+            // 切换显示顺序（invertDoublePages 与 RTL 异或）时自动交换左右页数
+            val isLtr = (resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_LTR) xor
+                invertDoublePage
+            val left = if (isLtr) page.number else rightPage.number
+            val right = if (isLtr) rightPage.number else page.number
+            "$left-$totalPages-$right"
+        } else {
+            ""
+        }
+        viewModel.onPageSelected(page, currentPageText, hasExtraPage, pageIndicatorText)
         // SY <--
+    }
+
+    /** 过渡页（章节切换页）成为当前页时调用：阅读器中不显示页码。 */
+    fun onPageSelected(transition: ChapterTransition) {
+        viewModel.onTransitionPageSelected()
+    }
+
+    /**
+     * 「空间深度模型」按钮的切换入口：不可用时给出明确原因，可用时生成并叠加立体视差视图。
+     */
+    private fun toggleSpatialScene() {
+        if (spatialSceneActive || spatialSceneBusy) {
+            hideSpatialScene()
+            return
+        }
+        val page = (viewModel.state.value.viewer as? PagerViewer)?.currentPage as? ReaderPage
+        // 空间深度只支持分页阅读的单页显示，双页/跨页或非分页阅读模式直接提示
+        if (page == null || currentPageHasExtraPage) {
+            menuToggleToast?.cancel()
+            menuToggleToast = toast(MR.strings.reader_spatial_scene_single_page_only)
+            return
+        }
+
+        spatialSceneBusy = true
+        spatialProgress = null
+        spatialScenePageKey = page.chapter.chapter.id to page.index
+        spatialSceneJob = lifecycleScope.launch {
+            try {
+                when (
+                    val result = spatialPipeline.create(
+                        page = page,
+                        onCompilationStarted = { htpArchitecture ->
+                            spatialModelCompileHtpVersion = htpArchitecture
+                        },
+                        onProgress = { progress ->
+                            spatialProgress = progress
+                        },
+                    )
+                ) {
+                    is DepthSpatialPipeline.Result.Ready -> {
+                        val scene = runCatching {
+                            withContext(Dispatchers.IO) { SpatialDepthSceneIO.read(result.file) }
+                        }.getOrElse { error ->
+                            spatialSceneBusy = false
+                            spatialScenePageKey = null
+                            menuToggleToast = toast(
+                                stringResource(MR.strings.reader_spatial_scene_failed, error.message.orEmpty()),
+                            )
+                            return@launch
+                        }
+                        // 生成期间可能已经翻页或关闭，避免给过期页面挂上新视图
+                        if (spatialScenePageKey != (page.chapter.chapter.id to page.index)) return@launch
+                        val sceneView = SpatialSceneView(this@ReaderActivity).apply {
+                            showScene(scene)
+                            setMotionSensitivity(spatialMotionSensitivity)
+                            setDepthStrength(spatialDepthStrength)
+                            setRotationAngles(
+                                spatialRotationAngleX,
+                                spatialRotationAngleY,
+                                spatialRotationAngleZ,
+                            )
+                            setOnClickListener { toggleMenu() }
+                        }
+                        val sceneContainer = FrameLayout(this@ReaderActivity).apply {
+                            addView(sceneView, MATCH_PARENT, MATCH_PARENT)
+                        }
+                        // 控件区域边距与宽度，以及右侧边缘的“<<”展开按钮
+                        val controlMargin = (16 * resources.displayMetrics.density + 0.5f).toInt()
+                        val controlWidth = (110 * resources.displayMetrics.density + 0.5f).toInt()
+                        // 退出按钮：位于右侧菜单下方，独立于菜单面板之外
+                        val exitButton = TextView(this@ReaderActivity).apply {
+                            text = stringResource(MR.strings.reader_spatial_scene_exit)
+                            setTextColor(Color.WHITE)
+                            textSize = 14f
+                            gravity = Gravity.CENTER
+                            minHeight = (40 * resources.displayMetrics.density + 0.5f).toInt()
+                            background = GradientDrawable().apply {
+                                cornerRadius = 16 * resources.displayMetrics.density
+                                setColor(Color.argb(230, 28, 27, 31))
+                                setStroke(
+                                    (1 * resources.displayMetrics.density).toInt(),
+                                    Color.argb(120, 255, 255, 255),
+                                )
+                            }
+                        }
+                        exitButton.setOnClickListener { hideSpatialScene() }
+                        val edgeExpandButton = TextView(this@ReaderActivity).apply {
+                            text = "<<"
+                            setTextColor(Color.WHITE)
+                            textSize = 14f
+                            gravity = Gravity.CENTER
+                            minWidth = (36 * resources.displayMetrics.density).toInt()
+                            minHeight = (44 * resources.displayMetrics.density).toInt()
+                            setBackgroundColor(Color.argb(230, 28, 27, 31))
+                            visibility = View.GONE
+                            alpha = 0f
+                        }
+                        edgeExpandButton.setOnClickListener {
+                            spatialSceneControls?.animate()?.translationX(0f)
+                                ?.setDuration(260)
+                                ?.setInterpolator(DecelerateInterpolator())
+                                ?.start()
+                            // 菜单回到屏幕内，退出按钮一并恢复
+                            exitButton.visibility = View.VISIBLE
+                            edgeExpandButton.animate().alpha(0f).setDuration(180).withEndAction {
+                                edgeExpandButton.visibility = View.GONE
+                            }
+                        }
+                        binding.root.addView(
+                            edgeExpandButton,
+                            FrameLayout.LayoutParams(
+                                WRAP_CONTENT,
+                                WRAP_CONTENT,
+                                Gravity.END or Gravity.CENTER_VERTICAL,
+                            ),
+                        )
+                        val spatialEdgeExpand = edgeExpandButton
+                        spatialEdgeExpandButton = edgeExpandButton
+                        val controls = SpatialSceneControlsView(this@ReaderActivity).apply {
+                            configure(
+                                sensitivity = spatialMotionSensitivity,
+                                depthStrength = spatialDepthStrength,
+                                rotationAngleX = spatialRotationAngleX,
+                                rotationAngleY = spatialRotationAngleY,
+                                rotationAngleZ = spatialRotationAngleZ,
+                                anchorText = stringResource(MR.strings.reader_spatial_rotation_anchor),
+                                anchorPickText = stringResource(MR.strings.reader_spatial_rotation_anchor_pick),
+                                sensitivityText = { value ->
+                                    stringResource(
+                                        MR.strings.reader_spatial_gyro_sensitivity,
+                                        String.format(Locale.getDefault(), "%.1f", value),
+                                    )
+                                },
+                                depthText = { value ->
+                                    stringResource(
+                                        MR.strings.reader_spatial_depth_strength,
+                                        String.format(Locale.getDefault(), "%.1f", value),
+                                    )
+                                },
+                                rotationText = { axis, value ->
+                                    stringResource(
+                                        MR.strings.reader_spatial_rotation_angle,
+                                        axis,
+                                        String.format(Locale.getDefault(), "%.1f", value),
+                                    )
+                                },
+                                rotationButtonText = stringResource(MR.strings.reader_spatial_rotation_angles),
+                                rotationResetText = stringResource(MR.strings.reader_spatial_rotation_reset),
+                                gyroResetText = stringResource(MR.strings.reader_spatial_gyro_reset),
+                                collapseText = ">>",
+                                onDismissRequested = {
+                                    // 菜单收起动画由控件自身处理，这里仅显示右侧“<<”展开按钮
+                                    spatialEdgeExpand.visibility = View.VISIBLE
+                                    spatialEdgeExpand.animate().alpha(1f).setDuration(180).start()
+                                    // 退出按钮跟随菜单一起收起
+                                    exitButton.visibility = View.GONE
+                                },
+                                onAnchorRequested = {
+                                    sceneView.beginRotationAnchorSelection {
+                                        completeAnchorSelection()
+                                        menuToggleToast?.cancel()
+                                        menuToggleToast = toast(MR.strings.reader_spatial_rotation_anchor_set)
+                                    }
+                                },
+                                onGyroscopeReset = {
+                                    sceneView.resetGyroscope()
+                                    menuToggleToast?.cancel()
+                                    menuToggleToast = toast(MR.strings.reader_spatial_gyro_reset_done)
+                                },
+                                onSensitivityChanged = { sensitivity ->
+                                    spatialMotionSensitivity = sensitivity
+                                    sceneView.setMotionSensitivity(sensitivity)
+                                },
+                                onDepthStrengthChanged = { strength ->
+                                    spatialDepthStrength = strength
+                                    sceneView.setDepthStrength(strength)
+                                },
+                                onRotationAnglesChanged = { xDegrees, yDegrees, zDegrees ->
+                                    spatialRotationAngleX = xDegrees
+                                    spatialRotationAngleY = yDegrees
+                                    spatialRotationAngleZ = zDegrees
+                                    sceneView.setRotationAngles(xDegrees, yDegrees, zDegrees)
+                                },
+                            )
+                        }
+                        // 菜单与退出按钮纵向排列：退出按钮在菜单面板之外的下方
+                        val controlsContainer = LinearLayout(this@ReaderActivity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            addView(controls, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                            addView(
+                                exitButton,
+                                LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+                                    topMargin = (8 * resources.displayMetrics.density + 0.5f).toInt()
+                                },
+                            )
+                        }
+                        binding.root.addView(
+                            controlsContainer,
+                            FrameLayout.LayoutParams(
+                                controlWidth,
+                                WRAP_CONTENT,
+                                Gravity.END or Gravity.CENTER_VERTICAL,
+                            ).apply {
+                                marginEnd = controlMargin
+                            },
+                        )
+                        // 悬浮控件避开系统栏
+                        ViewCompat.setOnApplyWindowInsetsListener(controlsContainer) { view, insets ->
+                            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                            (view.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+                                params.marginEnd = controlMargin + systemBars.right
+                                view.layoutParams = params
+                            }
+                            insets
+                        }
+                        binding.viewerContainer.addView(sceneContainer, MATCH_PARENT, MATCH_PARENT)
+                        sceneView.startMotion()
+                        spatialSceneView = sceneView
+                        spatialSceneContainer = sceneContainer
+                        spatialSceneControls = controls
+                        spatialSceneControlsContainer = controlsContainer
+                        spatialSceneActive = true
+                        // 生成完成后直接全屏看漫画
+                        hideMenu()
+                    }
+                    DepthSpatialPipeline.Result.ModelMissing -> {
+                        // 缺少 Depth Anything V3 模型，询问是否下载
+                        showSpatialModelDownloadDialog = true
+                        spatialScenePageKey = null
+                    }
+                    is DepthSpatialPipeline.Result.RuntimeUnavailable -> {
+                        // 非骁龙 HTP / Android 版本过低 / 缺少 QNN 运行库；有原生细节时一并显示便于定位
+                        menuToggleToast = toast(
+                            if (result.detail.isBlank()) {
+                                stringResource(MR.strings.reader_spatial_scene_runtime_unavailable)
+                            } else {
+                                stringResource(MR.strings.reader_spatial_scene_failed, result.detail)
+                            },
+                        )
+                        spatialScenePageKey = null
+                    }
+                    is DepthSpatialPipeline.Result.Failed -> {
+                        menuToggleToast = toast(
+                            stringResource(
+                                MR.strings.reader_spatial_scene_failed,
+                                result.cause.message.orEmpty(),
+                            ),
+                        )
+                        spatialScenePageKey = null
+                    }
+                }
+            } finally {
+                spatialModelCompileHtpVersion = null
+                spatialSceneBusy = false
+                spatialProgress = null
+                spatialSceneJob = null
+            }
+        }
+    }
+
+    /**
+     * 关闭并释放空间深度覆盖层（同时取消正在进行的生成任务）。
+     */
+    private fun hideSpatialScene() {
+        spatialSceneJob?.cancel()
+        spatialSceneJob = null
+        spatialModelCompileHtpVersion = null
+        spatialSceneBusy = false
+        spatialProgress = null
+        spatialScenePageKey = null
+        spatialSceneView?.let { view ->
+            view.release()
+        }
+        if (::binding.isInitialized) {
+            spatialSceneContainer?.let(binding.viewerContainer::removeView)
+            // 菜单与退出按钮都在这个容器里，移除容器即可
+            spatialSceneControlsContainer?.let(binding.root::removeView)
+            spatialEdgeExpandButton?.let {
+                it.animate().cancel()
+                it.alpha = 0f
+                it.translationX = 0f
+                it.visibility = View.GONE
+            }
+        }
+        spatialSceneView = null
+        spatialSceneContainer = null
+        spatialSceneControls = null
+        spatialSceneControlsContainer = null
+        spatialEdgeExpandButton = null
+        spatialSceneActive = false
+    }
+
+    /**
+     * 下载 Depth Anything V3 深度模型（约 101MB），完成后自动重试打开空间深度。
+     */
+    private fun downloadSpatialModel() {
+        if (spatialModelDownloadProgress != null) return
+        spatialModelDownloadProgress = 0
+        lifecycleScope.launch {
+            runCatching {
+                spatialModel.download { downloaded, total ->
+                    spatialModelDownloadProgress = if (total > 0L) {
+                        (downloaded * 100L / total).toInt().coerceIn(0, 100)
+                    } else {
+                        0
+                    }
+                }
+            }.onSuccess {
+                spatialModelDownloadProgress = null
+                showSpatialModelDownloadDialog = false
+                toggleSpatialScene()
+            }.onFailure { error ->
+                spatialModelDownloadProgress = null
+                showSpatialModelDownloadDialog = false
+                menuToggleToast = toast(
+                    stringResource(
+                        MR.strings.reader_spatial_scene_download_failed,
+                        error.message.orEmpty(),
+                    ),
+                )
+            }
+        }
     }
 
     /**

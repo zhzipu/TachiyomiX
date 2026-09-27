@@ -25,6 +25,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.apache.http.HttpStatus
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.sy.SYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.concurrent.TimeUnit
@@ -132,7 +133,7 @@ class SyncYomiSyncService(
 
         if (response.isSuccessful) {
             val newETag = response.headers["ETag"]
-                .takeIf { it?.isNotEmpty() == true } ?: throw SyncYomiException("Missing ETag")
+                .takeIf { it?.isNotEmpty() == true } ?: throw SyncYomiException(context.stringResource(SYMR.strings.sync_missing_etag))
 
             val byteArray = response.body.byteStream().use {
                 return@use it.readBytes()
@@ -151,9 +152,9 @@ class SyncYomiSyncService(
             }
         } else {
             val responseBody = response.body.string()
-            notifier.showSyncError("Failed to download sync data: $responseBody")
+            notifier.showSyncError(context.stringResource(SYMR.strings.sync_download_failed, responseBody))
             logcat(LogPriority.ERROR) { "SyncError: $responseBody" }
-            throw SyncYomiException("Failed to download sync data: $responseBody")
+            throw SyncYomiException(context.stringResource(SYMR.strings.sync_download_failed, responseBody))
         }
     }
 
@@ -207,7 +208,7 @@ class SyncYomiSyncService(
             return false
         } else {
             val responseBody = response.body.string()
-            notifier.showSyncError("Failed to upload sync data: $responseBody")
+            notifier.showSyncError(context.stringResource(SYMR.strings.sync_upload_failed, responseBody))
             logcat(LogPriority.ERROR) { "SyncError: $responseBody" }
             return false
         }

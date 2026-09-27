@@ -1,5 +1,7 @@
 package exh.recs
 
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -93,6 +95,10 @@ class BrowseRecommendsScreen(
                 displayMode = screenModel.displayMode,
                 snackbarHostState = snackbarHostState,
                 contentPadding = paddingValues,
+                // SY -->
+                listState = rememberLazyListState(),
+                gridState = rememberLazyGridState(),
+                // SY <--
                 onWebViewClick = null,
                 onHelpClick = null,
                 onLocalSourceHelpClick = null,

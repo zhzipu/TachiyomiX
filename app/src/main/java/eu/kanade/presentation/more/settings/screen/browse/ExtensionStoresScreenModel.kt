@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import mihon.domain.extension.interactor.AddExtensionStore
 import mihon.domain.extension.interactor.GetExtensionStores
 import mihon.domain.extension.interactor.RemoveExtensionStore
+import mihon.domain.extension.interactor.SetExtensionStoreEnabled
 import mihon.domain.extension.interactor.UpdateExtensionStores
 import mihon.domain.extension.model.ExtensionStore
 import tachiyomi.core.common.util.lang.launchIO
@@ -21,6 +22,7 @@ class ExtensionStoresScreenModel(
     private val addExtensionStore: AddExtensionStore = Injekt.get(),
     private val removeExtensionStore: RemoveExtensionStore = Injekt.get(),
     private val updateExtensionStores: UpdateExtensionStores = Injekt.get(),
+    private val setExtensionStoreEnabled: SetExtensionStoreEnabled = Injekt.get(),
     private val extensionManager: ExtensionManager = Injekt.get(),
 ) : StateScreenModel<ExtensionStoreScreenState>(ExtensionStoreScreenState.Loading) {
 
@@ -109,6 +111,16 @@ class ExtensionStoresScreenModel(
     fun deleteRepo(baseUrl: String) {
         screenModelScope.launchIO {
             removeExtensionStore(baseUrl)
+            extensionManager.findAvailableExtensions()
+        }
+    }
+
+    /**
+     * Enables or disables the given store.
+     */
+    fun toggleStoreEnabled(store: ExtensionStore) {
+        screenModelScope.launchIO {
+            setExtensionStoreEnabled(store.indexUrl, !store.isEnabled)
             extensionManager.findAvailableExtensions()
         }
     }

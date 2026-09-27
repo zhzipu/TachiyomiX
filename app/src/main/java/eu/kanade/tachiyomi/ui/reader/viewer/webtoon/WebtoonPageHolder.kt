@@ -18,6 +18,7 @@ import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.dpToPx
+import eu.kanade.tachiyomi.util.waifu2x.ReaderEnhancement
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.collectLatest
@@ -33,6 +34,7 @@ import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
+import java.io.InputStream
 
 /**
  * Holder of the webtoon reader for a single page of a chapter.
@@ -187,7 +189,19 @@ class WebtoonPageHolder(
     private suspend fun setImage() {
         progressIndicator.setProgress(0)
 
-        val streamFn = page?.stream ?: return
+        val targetPage = page ?: return
+
+        // 图像增强：已有原生放大结果时直接显示放大后的图片（未开启增强时行为与之前一致）
+        val enhancedFile = ReaderEnhancement.cachedFile(context, targetPage)
+        // 增强成品在图片左上角叠加水印；页面流本身可能已是增强成品，同样要显示
+        frame.setSuperResolutionWatermark(
+            visible = enhancedFile != null || targetPage.usingEnhancedStream,
+        )
+        val streamFn: () -> InputStream = if (enhancedFile != null) {
+            { enhancedFile.inputStream() }
+        } else {
+            targetPage.stream ?: return
+        }
 
         try {
             val (source, isAnimated) = withIOContext {

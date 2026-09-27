@@ -61,6 +61,20 @@ class UiPreferences(
 
     val useNewSourceNavigation: Preference<Boolean> = preferenceStore.getBoolean("use_new_source_navigation", true)
 
+    // 点击图源后直接打开的主页
+    val sourceHomePage: Preference<SourceHomePage> = preferenceStore.getEnum("source_home_page", SourceHomePage.NAVIGATION)
+
+    enum class SourceHomePage {
+        // 导航，保持原有跳转逻辑
+        NAVIGATION,
+
+        // 最近更新列表
+        LATEST,
+
+        // 浏览列表
+        BROWSE,
+    }
+
     val bottomBarLabels: Preference<Boolean> = preferenceStore.getBoolean("pref_show_bottom_bar_labels", true)
 
     val showNavUpdates: Preference<Boolean> = preferenceStore.getBoolean("pref_show_updates_button", true)

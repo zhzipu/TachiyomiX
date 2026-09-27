@@ -2,8 +2,10 @@ package eu.kanade.tachiyomi.data.sync
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import app.cash.sqldelight.async.coroutines.awaitAsList
 import eu.kanade.domain.sync.SyncPreferences
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.backup.create.BackupCreator
 import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.models.Backup
@@ -12,10 +14,15 @@ import eu.kanade.tachiyomi.data.backup.models.BackupManga
 import eu.kanade.tachiyomi.data.backup.restore.BackupRestoreJob
 import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaRestorer
+import eu.kanade.tachiyomi.data.sync.service.AliyunPanSyncService
 import eu.kanade.tachiyomi.data.sync.service.GoogleDriveSyncService
 import eu.kanade.tachiyomi.data.sync.service.SyncData
 import eu.kanade.tachiyomi.data.sync.service.SyncYomiSyncService
 import eu.kanade.tachiyomi.data.sync.service.WebDavSyncService
+// SY -->
+import eu.kanade.tachiyomi.data.upload.DownloadCategory
+import eu.kanade.tachiyomi.data.upload.isDownloadCategory
+// SY <--
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
 import logcat.LogPriority
@@ -58,6 +65,7 @@ class SyncManager(
         SYNCYOMI(1),
         GOOGLE_DRIVE(2),
         WEBDAV(3),
+        ALIYUN_PAN(4),
         ;
 
         companion object {
@@ -141,6 +149,10 @@ class SyncManager(
                 WebDavSyncService(context, json, syncPreferences)
             }
 
+            SyncService.ALIYUN_PAN -> {
+                AliyunPanSyncService(context, json, syncPreferences)
+            }
+
             else -> {
                 logcat(LogPriority.ERROR) { "Invalid sync service type: $syncService" }
                 null
@@ -159,13 +171,13 @@ class SyncManager(
             // nothing changed
             logcat(LogPriority.DEBUG) { "Skip restore due to remote was overwrite from local" }
             syncPreferences.lastSyncTimestamp.set(Date().time)
-            notifier.showSyncSuccess("Sync completed successfully")
+            notifier.showSyncSuccess(context.getString(R.string.sync_success_completed))
             return
         }
 
         // Stop the sync early if the remote backup is null or empty
         if (remoteBackup.backupManga.isEmpty() && remoteBackup.backupCategories.isEmpty() && remoteBackup.backupSources.isEmpty()) {
-            notifier.showSyncError("No data found on remote server.")
+            notifier.showSyncError(context.getString(R.string.sync_no_remote_data))
             return
         }
 
@@ -173,7 +185,7 @@ class SyncManager(
         if (syncPreferences.lastSyncTimestamp.get() == 0L && databaseManga.isNotEmpty()) {
             // It's first sync no need to restore data. (just update remote data)
             syncPreferences.lastSyncTimestamp.set(Date().time)
-            notifier.showSyncSuccess("Updated remote data successfully")
+            notifier.showSyncSuccess(context.getString(R.string.sync_updated_remote))
             return
         }
 
@@ -182,7 +194,13 @@ class SyncManager(
 
         val newSyncData = backup.copy(
             backupManga = filteredFavorites,
-            backupCategories = remoteBackup.backupCategories,
+            // SY -->
+            // 这份合并结果是要原样推回远端的，所以「下载」在这里也要挡一道：
+            // `BackupCreator` 只保证**本机新生成**的那份不含它，远端可能还留着
+            // 以前版本同步上去的那一条，不挡的话它会被一直带着来回传。
+            backupCategories = remoteBackup.backupCategories
+                .filterNot { it.name == DownloadCategory.NAME },
+            // SY <--
             backupSources = remoteBackup.backupSources,
             backupPreferences = remoteBackup.backupPreferences,
             backupSourcePreferences = remoteBackup.backupSourcePreferences,
@@ -207,17 +225,23 @@ class SyncManager(
         ) {
             // update the sync timestamp
             syncPreferences.lastSyncTimestamp.set(Date().time)
-            notifier.showSyncSuccess("Sync completed successfully")
+            notifier.showSyncSuccess(context.getString(R.string.sync_success_completed))
             return
         }
 
         if (syncOptions.categories) {
             val mergedUids = newSyncData.backupCategories.map { it.uid }.toSet()
             val mergedNames = newSyncData.backupCategories.map { it.name }.toSet()
+            // SY -->
+            // 「下载」是**本机状态**，它不是从远端来的（`BackupCreator` 不会把它传出去），
+            // 所以不能按「远端没有它就删掉」处理 —— 否则每同步一次，本地「下载」分类连同
+            // 它的成员关系就被删一次（FK 是 ON DELETE CASCADE），书架上那个页签会空掉，
+            // 直到下一次下载才自愈。
             val localCategories = getCategories.await().filterNot { it.id == 0L } // Exclude system category
             val categoriesToDelete = localCategories.filter {
-                it.uid !in mergedUids && it.name !in mergedNames
+                !it.isDownloadCategory && it.uid !in mergedUids && it.name !in mergedNames
             }
+            // SY <--
             if (categoriesToDelete.isNotEmpty()) {
                 database.transaction {
                     categoriesToDelete.forEach {
@@ -230,6 +254,12 @@ class SyncManager(
         val backupUri = writeSyncDataToCache(context, newSyncData)
         logcat(LogPriority.DEBUG) { "Got Backup Uri: $backupUri" }
         if (backupUri != null) {
+            Log.i(
+                "WebDavSync",
+                "starting restore job: isSync=true, options=[library=${syncOptions.libraryEntries}, categories=${syncOptions.categories}, " +
+                    "appSettings=${syncOptions.appSettings}, sourceSettings=${syncOptions.sourceSettings}, " +
+                    "extStores=${syncOptions.extensionStores}, savedSearches=${syncOptions.savedSearches}]",
+            )
             BackupRestoreJob.start(
                 context,
                 backupUri,

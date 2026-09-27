@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import eu.kanade.presentation.browse.components.GlobalSearchCardRow
 import eu.kanade.presentation.browse.components.GlobalSearchErrorResultItem
@@ -30,6 +31,17 @@ fun GlobalSearchScreen(
     onClickSource: (Source) -> Unit,
     onClickItem: (Manga) -> Unit,
     onLongClickItem: (Manga) -> Unit,
+    onSearchHistoryClick: (String) -> Unit = {},
+    onClearSearchHistory: (() -> Unit)? = null,
+    // SY -->
+    // 多选模式
+    onToggleSelectionMode: () -> Unit = {},
+    onSelectAll: () -> Unit = {},
+    onInvertSelection: () -> Unit = {},
+    onAddSelectionToLibrary: () -> Unit = {},
+    // 多选模式下按图源全选/全不选
+    onToggleSourceSelection: ((List<Manga>, Boolean) -> Unit)? = null,
+    // SY <--
 ) {
     Scaffold(
         topBar = { scrollBehavior ->
@@ -46,6 +58,16 @@ fun GlobalSearchScreen(
                 onlyShowHasResults = state.onlyShowHasResults,
                 onToggleResults = onToggleResults,
                 scrollBehavior = scrollBehavior,
+                searchHistory = state.searchHistory,
+                onSearchHistoryClick = onSearchHistoryClick,
+                onClearSearchHistory = onClearSearchHistory,
+                selectionMode = state.selectionMode,
+                selectionCount = state.selection.size,
+                onToggleSelectionMode = onToggleSelectionMode,
+                onCancelSelectionMode = onToggleSelectionMode,
+                onSelectAll = onSelectAll,
+                onInvertSelection = onInvertSelection,
+                onAddSelectionToLibrary = onAddSelectionToLibrary,
             )
         },
     ) { paddingValues ->
@@ -56,6 +78,8 @@ fun GlobalSearchScreen(
             onClickSource = onClickSource,
             onClickItem = onClickItem,
             onLongClickItem = onLongClickItem,
+            selection = state.selection,
+            onToggleSourceSelection = onToggleSourceSelection.takeIf { state.selectionMode },
         )
     }
 }
@@ -68,19 +92,29 @@ internal fun GlobalSearchContent(
     onClickSource: (Source) -> Unit,
     onClickItem: (Manga) -> Unit,
     onLongClickItem: (Manga) -> Unit,
+    selection: List<Manga> = emptyList(),
+    // 多选模式下按图源全选/全不选
+    onToggleSourceSelection: ((List<Manga>, Boolean) -> Unit)? = null,
     fromSourceId: Long? = null,
 ) {
+    val selectedIds = remember(selection) { selection.mapTo(mutableSetOf()) { it.id } }
     LazyColumn(
         contentPadding = contentPadding,
     ) {
         items.forEach { (source, result) ->
             item(key = source.id) {
+                val mangas = (result as? SearchItemResult.Success)?.result.orEmpty()
+                val allSelected = mangas.isNotEmpty() && mangas.all { it.id in selectedIds }
                 GlobalSearchResultItem(
                     title = fromSourceId?.let {
                         "▶ ${source.name}".takeIf { source.id == fromSourceId }
                     } ?: source.name,
                     subtitle = LocaleHelper.getLocalizedDisplayName(source.lang),
                     onClick = { onClickSource(source) },
+                    onToggleSelectAll = onToggleSourceSelection
+                        ?.takeIf { mangas.isNotEmpty() }
+                        ?.let { toggle -> { toggle(mangas, !allSelected) } },
+                    allSelected = allSelected,
                     modifier = Modifier.animateItem(),
                 ) {
                     when (result) {
@@ -93,6 +127,7 @@ internal fun GlobalSearchContent(
                                 getManga = getManga,
                                 onClick = onClickItem,
                                 onLongClick = onLongClickItem,
+                                selection = selection,
                             )
                         }
                         is SearchItemResult.Error -> {

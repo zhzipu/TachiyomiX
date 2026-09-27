@@ -9,6 +9,8 @@
     <string name="action_clean_titles">Clean titles</string>
     <string name="action_start_reading">Start reading</string>
     <string name="action_edit_info">Edit info</string>
+    <string name="action_source_settings">Extension settings</string>
+    <string name="action_modify_source_settings">Modify extension settings</string>
 
     <!-- Entry Type -->
     <string name="entry_type_manga">Manga</string>
@@ -205,8 +207,105 @@
     <string name="pref_source_source_filtering_summery">Filter the sources that are in categories, making the sources not get put under the language if they are in a category</string>
     <string name="pref_source_navigation">Replace latest button</string>
     <string name="pref_source_navigation_summery">Replace latest button with a custom browse view that includes both latest and browse</string>
+    <string name="pref_source_home_page">Source home page</string>
+    <string name="pref_source_home_page_summery">Page to open when tapping a source: %s</string>
+    <string name="pref_source_home_page_navigation">Navigation</string>
     <string name="pref_local_source_hidden_folders">Local source hidden folders</string>
     <string name="pref_local_source_hidden_folders_summery">Allow local source to read hidden folders</string>
+
+    <!-- Network source -->
+    <string name="network_source">Network source</string>
+    <string name="chapter_no_data">No data</string>
+    <string name="download_toast_completed">%1$s %2$s downloaded</string>
+    <string name="upload_toast_completed">%1$s uploaded</string>
+    <string name="upload_toast_completed_skipped">%1$s uploaded, %2$s chapter(s) skipped (no local files)</string>
+    <string name="network_source_protocol">Protocol</string>
+    <string name="network_source_protocol_webdav">WebDAV</string>
+    <string name="network_source_protocol_ftp">FTP</string>
+    <string name="network_source_server_url">Server URL</string>
+    <string name="network_source_server_url_summery">Server URL. WebDAV: http://192.168.1.10:5005 or https://example.com/remote.php/dav/files/user. FTP: ftp://192.168.1.10:2121. The port goes in the URL (80/443 for WebDAV, 21 for FTP); the library folder is created under it.</string>
+    <string name="network_source_username">Username</string>
+    <string name="network_source_password">Password</string>
+    <string name="network_source_test_connection">Test connection</string>
+    <string name="network_source_test_connection_summery">Checks the address, credentials and write access by creating the library folder if needed, then lists it.</string>
+    <string name="network_source_test_running">Testing connection…</string>
+    <string name="network_source_test_ok">Connected. The library has %1$d manga.</string>
+    <string name="network_source_test_ok_empty">Connected. The library is still empty.</string>
+    <string name="network_source_auto_upload">Automatically upload downloaded items</string>
+    <string name="network_source_auto_upload_summery">When enabled, manga in the library\'s \"Downloads\" category are uploaded to this source\'s WebDAV library as soon as their download finishes. If a manga with the same name already exists there, it is merged and only the missing chapters are added.</string>
+    <string name="network_source_bypass_proxy">Bypass app proxy</string>
+    <string name="network_source_bypass_proxy_summery">Recommended. Connects directly, ignoring the built-in proxy and manual HTTP proxy. LAN WebDAV servers (NAS, router, this device) are unreachable through a remote proxy node, which shows up as HTTP 502. Turn this off only if the server is on the public internet and needs the proxy.</string>
+    <string name="network_source_not_configured">Network source is not configured yet. Open its settings and fill in the host first.</string>
+    <string name="network_source_auth_failed">Authentication failed. Check the username and password.</string>
+    <string name="network_source_connection_failed">Could not reach the server: %s</string>
+
+    <!-- Uploading to the network source WebDAV library -->
+    <string name="action_upload">Upload</string>
+    <string name="upload_channel_group">Uploads</string>
+    <string name="upload_notifier_title">Uploading %s</string>
+    <string name="upload_notifier_progress">%1$d / %2$d chapters</string>
+    <string name="upload_notifier_completed">Uploaded %1$d chapters to %2$s</string>
+    <string name="upload_notifier_failed">%s upload failed</string>
+    <string name="upload_network_source_missing">The network source is unavailable.</string>
+    <string name="upload_not_configured">The network source is not configured yet. Fill in its settings first.</string>
+    <string name="upload_no_downloaded_chapters">No downloaded chapters to upload.</string>
+    <string name="upload_queued">Upload queued</string>
+    <string name="upload_conflict_title">Manga already exists on the server</string>
+    <string name="upload_conflict_message">\"%1$s\" already exists in the server library (folder %2$s). Merge into it, or create a new folder?</string>
+    <string name="upload_conflict_merge">Merge</string>
+    <string name="upload_conflict_new_folder">New folder</string>
+    <string name="library_progress_pages">Downloaded %1$d/%2$d pages</string>
+    <string name="download_category_delete_title">Delete downloads</string>
+    <string name="download_category_delete_confirm">Delete</string>
+    <string name="download_category_delete_message">Downloaded chapters on this device will be deleted, and the selected manga will leave the "下载" category. They stay in your library's other categories.</string>
+    <string name="library_progress_upload_pages">Uploaded %1$d/%2$d pages</string>
+    <string name="library_progress_chapters">Downloaded %1$d/%2$d chapters</string>
+    <string name="library_progress_upload_chapters">Uploaded %1$d/%2$d chapters</string>
+    <string name="download_continue_all">Continue</string>
+    <string name="download_continue_all_queued">Queued %1$d chapters</string>
+    <string name="download_continue_all_nothing">Nothing to download</string>
+    <!-- Upload queue -->
+    <string name="label_upload_queue">Upload queue</string>
+    <string name="information_no_uploads">No uploads</string>
+    <string name="action_order_by_title">Order by title</string>
+    <string name="action_cancel_all_uploads">Cancel all</string>
+    <string name="upload_status_queued">Queued</string>
+    <string name="upload_status_uploading">Uploading</string>
+    <string name="upload_status_waiting_confirm">Waiting for confirmation</string>
+    <string name="upload_status_completed">Completed</string>
+    <string name="upload_status_error">Upload failed</string>
+    <string name="upload_status_cancelled">Cancelled</string>
+    <string name="upload_queue_summary_paused">Paused • %1$d remaining</string>
+    <string name="upload_queue_summary_running">%1$d remaining</string>
+    <string name="upload_queue_summary_idle">Uploading…</string>
+    <!-- Add to upload queue -->
+    <string name="action_add_to_upload_queue">Add to queue</string>
+    <string name="upload_queue_added">Added %1$d chapters to the upload queue</string>
+    <string name="upload_manga_queued">Queued %1$d manga for upload</string>
+    <!-- Download entry inside the upload queue -->
+    <string name="action_download_manager">Downloads</string>
+
+    <!-- Combined download / upload actions (dialog on the download screen) -->
+    <string name="action_pause_all">Pause</string>
+    <string name="action_download">Download</string>
+    <string name="action_upload">Upload</string>
+    <string name="action_download_and_upload">Download and upload</string>
+    <string name="download_pause_dialog_title">Pause</string>
+    <string name="download_resume_dialog_title">Resume</string>
+    <string name="upload_scope_dialog_title">Which chapters to upload</string>
+    <string name="upload_scope_previous">Continue previous task</string>
+    <string name="upload_scope_all">All chapters</string>
+    <string name="action_paused_downloads">Downloads paused</string>
+    <string name="action_paused_uploads">Uploads paused</string>
+    <string name="action_paused_both">Downloads and uploads paused</string>
+    <!-- Clear WebDAV content -->
+    <string name="pref_clear_webdav">Clear WebDAV content</string>
+    <string name="pref_clear_webdav_summary">Delete everything uploaded to the library folder on the server</string>
+    <string name="pref_clear_webdav_confirm_title">Clear WebDAV content?</string>
+    <string name="pref_clear_webdav_confirm_message">This permanently deletes every manga folder and file inside “TachiyomiX manga” on the server. This cannot be undone.</string>
+    <string name="pref_clear_webdav_done">Deleted %1$d items</string>
+    <string name="pref_clear_webdav_failed">Failed to clear: %1$s</string>
+    <string name="action_delete">Delete</string>
 
     <!-- Backup settings -->
     <string name="custom_entry_info">Custom entry info</string>
@@ -214,10 +313,27 @@
     <string name="label_sync">Sync</string>
     <string name="label_triggers">Triggers</string>
 
+    <!-- About logo easter egg -->
+    <string name="about_logo_tap_1">Don\'t tap, it\'s useless</string>
+    <string name="about_logo_tap_2">I told you not to tap!</string>
+    <string name="about_logo_tap_3">(ʘдʘ╬)</string>
+
+    <!-- About -->
+    <string name="about_project_url">Project repository</string>
+    <string name="about_check_update">Check for updates</string>
+    <string name="about_update_latest">You\'re up to date</string>
+    <string name="about_update_check_failed">Failed to check for updates</string>
+
     <!-- Sync settings -->
     <string name="sync_error">Syncing library failed</string>
     <string name="sync_complete">Syncing library complete</string>
+    <string name="sync_download_failed">Failed to download sync data: %1$s</string>
     <string name="sync_in_progress">Sync is already in progress</string>
+    <string name="sync_missing_etag">Missing ETag</string>
+    <string name="sync_no_remote_data">No data found on remote server.</string>
+    <string name="sync_success_completed">Sync completed successfully</string>
+    <string name="sync_updated_remote">Updated remote data successfully</string>
+    <string name="sync_upload_failed">Failed to upload sync data: %1$s</string>
     <string name="pref_sync_host">Host</string>
     <string name="pref_sync_host_summ">Enter the host address for synchronizing your library</string>
     <string name="pref_sync_api_key">API key</string>
@@ -247,12 +363,38 @@
     <string name="pref_webdav_url_summ">Enter the WebDAV server URL (e.g. https://example.com/remote.php/dav/files/user)</string>
     <string name="pref_webdav_username">Username</string>
     <string name="pref_webdav_password">Password</string>
+    <string name="pref_webdav_test_connection">Test Connection</string>
+    <string name="webdav_connection_test_success">WebDAV connection successful</string>
+    <string name="webdav_connection_test_failed">WebDAV connection failed</string>
     <string name="pref_webdav_purge_sync_data">Clear Sync Data from WebDAV</string>
     <string name="webdav_sync_data_purged">Sync data purged from WebDAV</string>
     <string name="webdav_sync_data_not_found">No sync data found on WebDAV server</string>
     <string name="webdav_sync_data_purge_error">Error purging sync data from WebDAV server</string>
     <string name="webdav_not_configured">WebDAV server not configured</string>
     <string name="pref_purge_confirmation_webdav_message">Purging sync data will delete all your sync data from WebDAV. Are you sure you want to continue?</string>
+    <string name="aliyun_pan">Aliyun Pan</string>
+    <string name="pref_aliyun_pan_sign_in">Sign in</string>
+    <string name="pref_aliyun_pan_sign_in_summ">Scan the QR code with the Aliyun Drive app to log in and automatically obtain your refresh token</string>
+    <string name="aliyun_pan_login_success">Logged in to Aliyun Pan</string>
+    <string name="aliyun_pan_qr_waiting">Scan the QR code with the Aliyun Drive app to log in</string>
+    <string name="aliyun_pan_qr_scanned">Scanned, please confirm on your phone</string>
+    <string name="aliyun_pan_qr_expired">QR code expired, please refresh and try again</string>
+    <string name="aliyun_pan_qr_failed">QR login failed, please try again</string>
+    <string name="aliyun_pan_qr_refresh">Refresh QR code</string>
+    <string name="aliyun_pan_qr_save">Save to gallery</string>
+    <string name="aliyun_pan_qr_saved">QR code saved to gallery</string>
+    <string name="aliyun_pan_qr_save_failed">Failed to save QR code to gallery</string>
+    <string name="pref_aliyun_pan_refresh_token">Refresh Token</string>
+    <string name="pref_aliyun_pan_refresh_token_summ">Usually obtained automatically by signing in above. You can also paste one manually from the Aliyun Drive web page (Developer Tools &gt; Local Storage &gt; token &gt; refresh_token) or via the aliyunpan command line tool (aliyunpan login)</string>
+    <string name="pref_aliyun_pan_test_connection">Test Connection</string>
+    <string name="aliyun_pan_connection_test_success">Aliyun Pan connection successful</string>
+    <string name="aliyun_pan_connection_test_failed">Aliyun Pan connection failed</string>
+    <string name="pref_aliyun_pan_purge_sync_data">Clear Sync Data from Aliyun Pan</string>
+    <string name="aliyun_pan_sync_data_purged">Sync data purged from Aliyun Pan</string>
+    <string name="aliyun_pan_sync_data_not_found">No sync data found in Aliyun Pan</string>
+    <string name="aliyun_pan_sync_data_purge_error">Error purging sync data from Aliyun Pan</string>
+    <string name="aliyun_pan_not_configured">Aliyun Pan is not configured</string>
+    <string name="pref_purge_confirmation_aliyun_pan_message">Purging sync data will delete all your sync data from Aliyun Pan. Are you sure you want to continue?</string>
     <string name="error_uploading_sync_data">Error uploading sync data to Google Drive</string>
     <string name="error_deleting_google_drive_lock_file">Error Deleting Google Drive Lock File</string>
     <string name="error_before_sync_gdrive">Error before sync: %s</string>
@@ -329,6 +471,7 @@
     <string name="reader_bottom_buttons">Reader Bottom Buttons</string>
     <string name="reader_bottom_buttons_summary">Customize what buttons appear at the bottom of the reader</string>
     <string name="pref_smooth_scroll">Smooth Auto Scroll</string>
+    <string name="pref_disable_double_tap_zoom">Disable double tap zoom</string>
 
     <!-- Reader -->
     <!-- Reader Actions -->
@@ -440,6 +583,11 @@
     <string name="save_search_delete_message">Are you sure you wish to delete your saved search query: \'%1$s\'?</string>
     <string name="save_search_invalid">Saved search invalid, filters have changed</string>
     <string name="save_search_invalid_name">Invalid saved search name</string>
+
+    <!-- Search History -->
+    <string name="search_history">Search history</string>
+    <string name="clear_search_history">Clear search history</string>
+    <string name="add_to_tag">Add to tag bar</string>
 
     <!-- Source Categories -->
     <string name="no_source_categories">No source categories available</string>
@@ -749,4 +897,37 @@
 
     <!-- Humanize time -->
     <string name="humanize_fallback">moments ago</string>
+
+    <!-- Browse source pagination -->
+    <string name="browse_page_previous">Previous page</string>
+    <string name="browse_page_next">Next page</string>
+    <string name="browse_page_jump">Jump to page</string>
+    <string name="browse_page_hint">Page number</string>
+    <string name="browse_page_indicator">Page %1$d</string>
+    <string name="browse_page_swipe">Swipe to page</string>
+
+    <!-- Built-in network proxy -->
+    <string name="pref_category_proxy">Network proxy</string>
+    <string name="pref_proxy_summary">HTTP proxy, Clash proxy</string>
+    <string name="proxy_http_group">HTTP proxy</string>
+    <string name="proxy_http_enable">Enable HTTP proxy</string>
+    <string name="proxy_http_enable_summary">Manually set an HTTP proxy server</string>
+    <string name="proxy_http_host">Proxy host</string>
+    <string name="proxy_http_port">Proxy port</string>
+    <string name="proxy_clash_group">Clash proxy</string>
+    <string name="proxy_enable">Enable Clash proxy</string>
+    <string name="proxy_enable_summary">Route app traffic through the built-in proxy</string>
+    <string name="proxy_subscription_url">Clash Subscription URL</string>
+    <string name="proxy_manual_config">Manual configuration</string>
+    <string name="proxy_manual_config_summary">Clash YAML proxy list</string>
+    <string name="proxy_port">Proxy port</string>
+    <string name="proxy_test_url">Delay test URL</string>
+    <string name="proxy_node_selection">Select node</string>
+    <string name="proxy_no_nodes">No nodes available</string>
+    <string name="proxy_test_delay">Test</string>
+    <string name="proxy_delay_ms">%1$d ms</string>
+    <string name="proxy_delay_failed">Timeout</string>
+    <string name="proxy_node_not_selected">Not selected</string>
+    <string name="proxy_load_failed">Failed to load nodes</string>
+    <string name="proxy_refresh_nodes">Refresh nodes</string>
 </resources>

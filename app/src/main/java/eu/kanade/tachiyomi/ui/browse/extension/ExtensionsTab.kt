@@ -38,6 +38,8 @@ fun extensionsTab(
         titleRes = MR.strings.label_extensions,
         badgeNumber = state.updates.takeIf { it > 0 },
         searchEnabled = true,
+        searchQuery = state.searchQuery,
+        onChangeSearchQuery = extensionsScreenModel::search,
         actions = listOf(
             AppBar.OverflowAction(
                 title = stringResource(MR.strings.action_filter),
@@ -88,6 +90,11 @@ fun extensionsTab(
                 onUninstallExtension = { extensionsScreenModel.uninstallExtension(it) },
                 onUpdateExtension = extensionsScreenModel::updateExtension,
                 onRefresh = extensionsScreenModel::findAvailableExtensions,
+                // SY -->
+                nsfwFilter = state.nsfwFilter,
+                onNsfwFilterClick = extensionsScreenModel::toggleNsfwFilter,
+                onMoveLanguage = extensionsScreenModel::moveLanguage,
+                // SY <--
             )
 
             privateExtensionToUninstall?.let { extension ->

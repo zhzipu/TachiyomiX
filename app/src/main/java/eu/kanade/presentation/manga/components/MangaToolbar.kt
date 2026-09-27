@@ -43,6 +43,7 @@ fun MangaToolbar(
     onClickRecommend: (() -> Unit)?,
     onClickMerge: (() -> Unit)?,
     onClickMergedSettings: (() -> Unit)?,
+    onClickSourceSettings: (() -> Unit)?,
     // SY <--
 
     // For action mode
@@ -183,6 +184,14 @@ fun MangaToolbar(
                             AppBar.OverflowAction(
                                 title = stringResource(SYMR.strings.merge_settings),
                                 onClick = onClickMergedSettings,
+                            ),
+                        )
+                    }
+                    if (onClickSourceSettings != null) {
+                        add(
+                            AppBar.OverflowAction(
+                                title = stringResource(SYMR.strings.action_source_settings),
+                                onClick = onClickSourceSettings,
                             ),
                         )
                     }

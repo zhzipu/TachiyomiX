@@ -6,7 +6,6 @@ import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -24,6 +23,7 @@ import eu.kanade.tachiyomi.ui.browse.extension.ExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.extension.extensionsTab
 import eu.kanade.tachiyomi.ui.browse.feed.feedTab
 import eu.kanade.tachiyomi.ui.browse.migration.sources.migrateSourceTab
+import eu.kanade.tachiyomi.ui.browse.source.SourcesScreenModel
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.GlobalSearchScreen
 import eu.kanade.tachiyomi.ui.browse.source.sourcesTab
 import eu.kanade.tachiyomi.ui.main.MainActivity
@@ -69,27 +69,27 @@ data object BrowseTab : Tab {
         val feedTabInFront by remember { Injekt.get<UiPreferences>().feedTabInFront.asState(scope) }
         // SY <--
 
-        // Hoisted for extensions tab's search bar
+        // Hoisted for the sources/extension tabs' search bars
+        val sourcesScreenModel = rememberScreenModel { SourcesScreenModel(smartSearchConfig = null) }
         val extensionsScreenModel = rememberScreenModel { ExtensionsScreenModel() }
-        val extensionsState by extensionsScreenModel.state.collectAsState()
 
         // SY -->
         val tabs = if (hideFeedTab) {
             listOf(
-                sourcesTab(),
+                sourcesTab(smartSearchConfig = null, screenModel = sourcesScreenModel),
                 extensionsTab(extensionsScreenModel),
                 migrateSourceTab(),
             )
         } else if (feedTabInFront) {
             listOf(
                 feedTab(),
-                sourcesTab(),
+                sourcesTab(smartSearchConfig = null, screenModel = sourcesScreenModel),
                 extensionsTab(extensionsScreenModel),
                 migrateSourceTab(),
             )
         } else {
             listOf(
-                sourcesTab(),
+                sourcesTab(smartSearchConfig = null, screenModel = sourcesScreenModel),
                 feedTab(),
                 extensionsTab(extensionsScreenModel),
                 migrateSourceTab(),
@@ -103,8 +103,6 @@ data object BrowseTab : Tab {
             titleRes = MR.strings.browse,
             tabs = tabs,
             state = state,
-            searchQuery = extensionsState.searchQuery,
-            onChangeSearchQuery = extensionsScreenModel::search,
         )
         LaunchedEffect(Unit) {
             switchToExtensionTabChannel.receiveAsFlow()

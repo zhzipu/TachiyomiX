@@ -25,6 +25,9 @@ fun FastScrollLazyVerticalGrid(
     topContentPadding: Dp = Dp.Hairline,
     bottomContentPadding: Dp = Dp.Hairline,
     endContentPadding: Dp = Dp.Hairline,
+    scrollAtStart: Boolean = false,
+    startContentPadding: Dp = Dp.Hairline,
+    hideScrollbar: Boolean = false,
     reverseLayout: Boolean = false,
     verticalArrangement: Arrangement.Vertical =
         if (!reverseLayout) Arrangement.Top else Arrangement.Bottom,
@@ -43,6 +46,9 @@ fun FastScrollLazyVerticalGrid(
         topContentPadding = topContentPadding,
         bottomContentPadding = bottomContentPadding,
         endContentPadding = endContentPadding,
+        scrollAtStart = scrollAtStart,
+        startContentPadding = startContentPadding,
+        hideScrollbar = hideScrollbar,
     ) {
         LazyVerticalGrid(
             columns = columns,

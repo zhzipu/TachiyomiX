@@ -23,6 +23,7 @@ import eu.kanade.tachiyomi.data.database.models.toDomainChapter
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.download.model.Download
+import eu.kanade.tachiyomi.util.waifu2x.ImageEnhancer
 import eu.kanade.tachiyomi.data.saver.Image
 import eu.kanade.tachiyomi.data.saver.ImageSaver
 import eu.kanade.tachiyomi.data.saver.Location
@@ -452,6 +453,9 @@ class ReaderViewModel @JvmOverloads constructor(
         page: Int? = null,
         // SY <--
     ): ViewerChapters {
+        // 图像增强：切换到新章节时清空上一章残留的增强队列，
+        // 让本批次从左下角进度、队列内容都从新章节重新开始
+        ImageEnhancer.reset(page ?: 0)
         loader.loadChapter(chapter /* SY --> */, page/* SY <-- */)
 
         val chapterPos = chapterList.indexOf(chapter)
@@ -584,14 +588,20 @@ class ReaderViewModel @JvmOverloads constructor(
      * read, update tracking services, enqueue downloaded chapter deletion, and updating the active chapter if this
      * [page]'s chapter is different from the currently active.
      */
-    fun onPageSelected(page: ReaderPage, currentPageText: String /* SY --> */, hasExtraPage: Boolean /* SY <-- */) {
+    fun onPageSelected(page: ReaderPage, currentPageText: String /* SY --> */, hasExtraPage: Boolean /* SY <-- */, pageIndicatorText: String = "") {
         // InsertPage doesn't change page progress
         if (page is InsertPage) {
             return
         }
 
         // SY -->
-        mutableState.update { it.copy(currentPageText = currentPageText) }
+        mutableState.update {
+            it.copy(
+                currentPageText = currentPageText,
+                pageIndicatorText = pageIndicatorText,
+                pageIndicatorHidden = false,
+            )
+        }
         // SY <--
 
         val selectedChapter = page.chapter
@@ -613,6 +623,13 @@ class ReaderViewModel @JvmOverloads constructor(
         }
 
         eventChannel.trySend(Event.PageChanged)
+    }
+
+    /**
+     * 过渡页（章节切换页）成为当前 view 时调用：阅读器中不显示页码。
+     */
+    fun onTransitionPageSelected() {
+        mutableState.update { it.copy(pageIndicatorHidden = true) }
     }
 
     private fun downloadNextChapters() {
@@ -1052,6 +1069,10 @@ class ReaderViewModel @JvmOverloads constructor(
         mutableState.update { it.copy(dialog = Dialog.Settings) }
     }
 
+    fun openEnhancementSettingsDialog() {
+        mutableState.update { it.copy(dialog = Dialog.EnhancementSettings) }
+    }
+
     fun closeDialog() {
         mutableState.update { it.copy(dialog = null) }
     }
@@ -1358,6 +1379,10 @@ class ReaderViewModel @JvmOverloads constructor(
 
         // SY -->
         val currentPageText: String = "",
+        /** 阅读器中页数指示器文本：双页跨页时「左页-总页数-右页」（如 1-18-2）；单页为空走默认格式。 */
+        val pageIndicatorText: String = "",
+        /** 过渡页（章节切换页）或未就绪页时为 true：阅读器中不显示页码。 */
+        val pageIndicatorHidden: Boolean = false,
         val meta: RaisedSearchMetadata? = null,
         val mergedManga: Map<Long, Manga>? = null,
         val ehUtilsVisible: Boolean = false,
@@ -1385,6 +1410,7 @@ class ReaderViewModel @JvmOverloads constructor(
         data object OrientationModeSelect : Dialog
 
         // SY -->
+        data object EnhancementSettings : Dialog
         data object ChapterList : Dialog
         // SY <--
 

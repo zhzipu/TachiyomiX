@@ -27,6 +27,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.core.preference.asToggleableState
+import eu.kanade.tachiyomi.data.upload.isDownloadCategory
 import eu.kanade.presentation.category.visualName
 import kotlinx.coroutines.delay
 import tachiyomi.core.common.preference.CheckboxState
@@ -224,7 +225,17 @@ fun ChangeCategoryDialog(
     onEditCategories: () -> Unit,
     onConfirm: (List<Long>, List<Long>) -> Unit,
 ) {
-    if (initialSelection.isEmpty()) {
+    // SY -->
+    // 「下载」不出现在这里（用户要求）。它是下载模块**自己的**分类：成员由模块维护 ——
+    // 开始下载就进、本地下载删光才出（见 DownloadCategory），跟用户怎么分门别类无关。
+    // 所以它既不该出现在别的漫画的「设置分类」里，也不该被改。
+    // 真被勾掉也没关系：确认时 DownloadCategory.resolveUserSelection 会把它保留下来；
+    // 这里只是不让它出现在列表里。
+    val shownSelection = remember(initialSelection) {
+        initialSelection.filterNot { it.value.isDownloadCategory }
+    }
+    // SY <--
+    if (shownSelection.isEmpty()) {
         AlertDialog(
             onDismissRequest = onDismissRequest,
             confirmButton = {
@@ -246,7 +257,7 @@ fun ChangeCategoryDialog(
         )
         return
     }
-    var selection by remember { mutableStateOf(initialSelection) }
+    var selection by remember { mutableStateOf(shownSelection) }
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {

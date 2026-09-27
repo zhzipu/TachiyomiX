@@ -5,6 +5,7 @@ enum class DownloadAction {
     NEXT_5_CHAPTERS,
     NEXT_10_CHAPTERS,
     NEXT_25_CHAPTERS,
+    ALL_CHAPTERS,
     UNREAD_CHAPTERS,
     BOOKMARKED_CHAPTERS,
 }

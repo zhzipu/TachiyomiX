@@ -8,6 +8,7 @@ import eu.kanade.core.util.insertSeparators
 import eu.kanade.domain.manga.interactor.UpdateManga
 import eu.kanade.domain.track.interactor.AddTracks
 import eu.kanade.presentation.history.HistoryUiModel
+import eu.kanade.tachiyomi.data.upload.DownloadCategory
 import eu.kanade.tachiyomi.util.lang.toLocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -53,6 +54,8 @@ class HistoryScreenModel(
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val removeHistory: RemoveHistory = Injekt.get(),
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
+    // 「下载=模块」的两条分类规则落在它身上，见 DownloadCategory.resolveUserSelection
+    private val downloadCategory: DownloadCategory = Injekt.get(),
     private val updateManga: UpdateManga = Injekt.get(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
     private val sourceManager: SourceManager = Injekt.get(),
@@ -151,7 +154,9 @@ class HistoryScreenModel(
 
     private fun moveMangaToCategory(mangaId: Long, categoryIds: List<Long>) {
         screenModelScope.launchIO {
-            setMangaCategories.await(mangaId, categoryIds)
+            // 「下载」成员关系由下载模块维护：用户改分类踢不出去，只勾它则补上「默认」
+            // （见 DownloadCategory.resolveUserSelection）
+            setMangaCategories.await(mangaId, downloadCategory.resolveUserSelection(mangaId, categoryIds))
         }
     }
 

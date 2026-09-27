@@ -10,6 +10,8 @@ import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.util.storage.getUriCompat
+import eu.kanade.tachiyomi.util.system.INSTALLERX_PACKAGE_NAME
+import eu.kanade.tachiyomi.util.system.installerXPackageName
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,7 +43,7 @@ internal class ExtensionInstaller(
     private val activeSteps = mutableMapOf<Long, MutableStateFlow<InstallStep>>()
     private val extensionInstaller = Injekt.get<BasePreferences>().extensionInstaller
 
-    private val httpClient: OkHttpClient = Injekt.get<NetworkHelper>().client
+    private val directClient: OkHttpClient = Injekt.get<NetworkHelper>().directClient
 
     /**
      * Adds the given extension to the downloads queue and returns an observable containing its
@@ -62,10 +64,13 @@ internal class ExtensionInstaller(
             try {
                 step.value = InstallStep.Downloading
                 val request = Request.Builder().url(url).build()
-                val response = httpClient.newCall(request).execute()
+                // Extension APK downloads always bypass the built-in Clash / HTTP
+                // proxy. Extension repos are usually hosted on GitHub, and proxy
+                // nodes often can't reach GitHub's release asset CDN.
+                val response = directClient.newCall(request).execute()
 
                 if (!response.isSuccessful) {
-                    throw Exception("Failed to download extension")
+                    throw Exception("Failed to download extension (HTTP ${response.code})")
                 }
                 response.body.byteStream().use { input ->
                     tmpFile.outputStream().use { output ->
@@ -79,7 +84,7 @@ internal class ExtensionInstaller(
                 if (e is InterruptedException) {
                     // Canceled
                 } else {
-                    logcat(LogPriority.ERROR, e)
+                    logcat(LogPriority.ERROR, e) { "Failed to download extension from $url" }
                     step.value = InstallStep.Error
                 }
             }
@@ -102,11 +107,26 @@ internal class ExtensionInstaller(
      */
     private fun installApk(downloadId: Long, tempFile: File) {
         when (val installer = extensionInstaller.get()) {
-            BasePreferences.ExtensionInstaller.LEGACY -> {
+            // SY --> INSTALLERX 复用 LEGACY 这套 Activity：既能拿到安装结果，也会在结束时清理临时文件
+            BasePreferences.ExtensionInstaller.LEGACY,
+            BasePreferences.ExtensionInstaller.INSTALLERX -> {
+                // SY <--
                 val intent = Intent(context, ExtensionInstallActivity::class.java)
                     .setDataAndType(tempFile.getUriCompat(context), APK_MIME)
                     .putExtra(EXTRA_DOWNLOAD_ID, downloadId)
                     .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+                // SY --> 指定目标安装器，避免系统再弹出安装器选择框
+                if (installer == BasePreferences.ExtensionInstaller.INSTALLERX) {
+                    // 包名按设备实际安装的那个来，不能写死：InstallerX Revived 存在
+                    // com.rosan.installer.x 与 com.rosan.installer.x.revived 两种发布包名。
+                    // 取不到就退回首选包名，让后续 resolve 失败走 toast 分支而不是静默发错目标。
+                    intent.putExtra(
+                        EXTRA_TARGET_PACKAGE,
+                        context.installerXPackageName ?: INSTALLERX_PACKAGE_NAME,
+                    )
+                }
+                // SY <--
 
                 context.startActivity(intent)
             }
@@ -174,5 +194,8 @@ internal class ExtensionInstaller(
     companion object {
         const val APK_MIME = "application/vnd.android.package-archive"
         const val EXTRA_DOWNLOAD_ID = "ExtensionInstaller.extra.DOWNLOAD_ID"
+        // SY --> 指定把安装意图直接发给这个包，而不是交给系统去选择安装器
+        const val EXTRA_TARGET_PACKAGE = "ExtensionInstaller.extra.TARGET_PACKAGE"
+        // SY <--
     }
 }

@@ -3,6 +3,7 @@ package tachiyomi.presentation.core.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
@@ -25,6 +26,8 @@ fun ScrollbarLazyColumn(
     state: LazyListState = rememberLazyListState(),
     contentPadding: PaddingValues = PaddingValues(0.dp),
     reverseLayout: Boolean = false,
+    scrollAtStart: Boolean = false,
+    hideScrollbar: Boolean = false,
     verticalArrangement: Arrangement.Vertical =
         if (!reverseLayout) Arrangement.Top else Arrangement.Bottom,
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
@@ -42,6 +45,8 @@ fun ScrollbarLazyColumn(
                 state = state,
                 reverseScrolling = reverseLayout,
                 positionOffsetPx = positionOffset,
+                scrollAtStart = scrollAtStart,
+                hideScrollbar = hideScrollbar,
             ),
         state = state,
         contentPadding = contentPadding,
@@ -62,6 +67,8 @@ fun FastScrollLazyColumn(
     state: LazyListState = rememberLazyListState(),
     contentPadding: PaddingValues = PaddingValues(0.dp),
     reverseLayout: Boolean = false,
+    scrollAtStart: Boolean = false,
+    hideScrollbar: Boolean = false,
     verticalArrangement: Arrangement.Vertical =
         if (!reverseLayout) Arrangement.Top else Arrangement.Bottom,
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
@@ -73,6 +80,9 @@ fun FastScrollLazyColumn(
         modifier = modifier,
         topContentPadding = contentPadding.calculateTopPadding(),
         endContentPadding = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
+        startContentPadding = contentPadding.calculateStartPadding(LocalLayoutDirection.current),
+        scrollAtStart = scrollAtStart,
+        hideScrollbar = hideScrollbar,
     ) {
         LazyColumn(
             state = state,

@@ -41,6 +41,7 @@ import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.upload.DownloadCategory
 import eu.kanade.tachiyomi.source.PagePreviewSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.getNameForMangaInfo
@@ -130,6 +131,7 @@ import tachiyomi.domain.track.model.Track
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
 import tachiyomi.source.local.LocalSource
+import tachiyomi.source.network.config.isPendingChapterUrl
 import tachiyomi.source.local.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -181,6 +183,8 @@ class MangaScreenModel(
     private val getTracks: GetTracks = Injekt.get(),
     private val addTracks: AddTracks = Injekt.get(),
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
+    // 「下载=模块」的分类规则落在它身上，见 DownloadCategory.resolveUserSelection
+    private val downloadCategory: DownloadCategory = Injekt.get(),
     private val mangaRepository: MangaRepository = Injekt.get(),
     private val filterChaptersForDownload: FilterChaptersForDownload = Injekt.get(),
     private val updateMangaFromRemote: UpdateMangaFromRemote = Injekt.get(),
@@ -910,6 +914,7 @@ class MangaScreenModel(
     }
 
     fun moveMangaToCategoriesAndAddToLibrary(manga: Manga, categories: List<Long>) {
+        // 走 moveMangaToCategory，所以「只勾下载补默认」「保留下载成员」两条规则都生效
         moveMangaToCategory(categories)
         if (manga.favorite) return
 
@@ -930,7 +935,9 @@ class MangaScreenModel(
 
     private fun moveMangaToCategory(categoryIds: List<Long>) {
         screenModelScope.launchIO {
-            setMangaCategories.await(mangaId, categoryIds)
+            // 两个「下载=模块」规则都收在 resolveUserSelection 里：只勾下载要补默认；
+            // 本来在「下载」里就保留（用户改分类踢不出去，只有删掉本地下载才会离开）。
+            setMangaCategories.await(mangaId, downloadCategory.resolveUserSelection(mangaId, categoryIds))
         }
     }
 
@@ -1123,7 +1130,13 @@ class MangaScreenModel(
      */
     fun getNextUnreadChapter(): Chapter? {
         val successState = successState ?: return null
-        return successState.chapters.getNextUnread(successState.manga)
+        // SY -->
+        // 「未上传」的章节（服务器上还没有内容）不能当「继续阅读」的目标 ——
+        // 点开只会提示「无数据」，等于这个按钮点不动。跳过它们去找下一话能看的。
+        return successState.chapters
+            .filterNot { it.chapter.url.isPendingChapterUrl() }
+            .getNextUnread(successState.manga)
+        // SY <--
     }
 
     private fun getUnreadChapters(): List<Chapter> {
@@ -1148,6 +1161,13 @@ class MangaScreenModel(
         val chapterItems = if (skipFiltered) filteredChapters.orEmpty() else allChapters.orEmpty()
         return chapterItems
             .filter { (chapter, dlStatus) -> chapter.bookmark && dlStatus == Download.State.NOT_DOWNLOADED }
+            .map { it.chapter }
+    }
+
+    private fun getUndownloadedChapters(): List<Chapter> {
+        val chapterItems = if (skipFiltered) filteredChapters.orEmpty() else allChapters.orEmpty()
+        return chapterItems
+            .filter { (_, dlStatus) -> dlStatus == Download.State.NOT_DOWNLOADED }
             .map { it.chapter }
     }
 
@@ -1212,6 +1232,7 @@ class MangaScreenModel(
             DownloadAction.NEXT_5_CHAPTERS -> getUnreadChaptersSorted().take(5)
             DownloadAction.NEXT_10_CHAPTERS -> getUnreadChaptersSorted().take(10)
             DownloadAction.NEXT_25_CHAPTERS -> getUnreadChaptersSorted().take(25)
+            DownloadAction.ALL_CHAPTERS -> getUndownloadedChapters()
             DownloadAction.UNREAD_CHAPTERS -> getUnreadChapters()
             DownloadAction.BOOKMARKED_CHAPTERS -> getBookmarkedChapters()
         }

@@ -16,6 +16,7 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -36,6 +37,7 @@ fun ExtensionStoresContent(
     onOpenWebsite: (ExtensionStore) -> Unit,
     onOpenDiscord: (ExtensionStore) -> Unit,
     onClickDelete: (ExtensionStore) -> Unit,
+    onToggleEnabled: (ExtensionStore) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -53,6 +55,7 @@ fun ExtensionStoresContent(
                     onOpenDiscord = { onOpenDiscord(it) },
                     onCopy = { onCopy(it) },
                     onDelete = { onClickDelete(it) },
+                    onToggleEnabled = { onToggleEnabled(it) },
                 )
             }
         }
@@ -66,6 +69,7 @@ private fun ExtensionStoresListItem(
     onOpenDiscord: () -> Unit,
     onCopy: () -> Unit,
     onDelete: () -> Unit,
+    onToggleEnabled: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ElevatedCard(
@@ -92,6 +96,7 @@ private fun ExtensionStoresListItem(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onOpenWebsite) {
                 Icon(
@@ -122,6 +127,11 @@ private fun ExtensionStoresListItem(
                     contentDescription = stringResource(MR.strings.action_delete),
                 )
             }
+
+            Switch(
+                checked = store.isEnabled,
+                onCheckedChange = { onToggleEnabled() },
+            )
         }
     }
 }

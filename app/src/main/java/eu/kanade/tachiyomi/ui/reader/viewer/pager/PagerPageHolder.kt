@@ -3,21 +3,32 @@ package eu.kanade.tachiyomi.ui.reader.viewer.pager
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.view.LayoutInflater
+import android.view.View
+import android.view.animation.DecelerateInterpolator
+import android.widget.FrameLayout
+import android.widget.ImageView
 import androidx.core.view.isVisible
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
+import eu.kanade.tachiyomi.util.view.isVisibleOnScreen
+import eu.kanade.tachiyomi.util.waifu2x.ImageEnhancer
+import eu.kanade.tachiyomi.util.waifu2x.ReaderEnhancement
 import eu.kanade.tachiyomi.widget.ViewPagerAdapter
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
@@ -31,6 +42,9 @@ import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.decoder.ImageDecoder
 import tachiyomi.i18n.MR
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
+import java.io.InputStream
 import kotlin.math.max
 
 /**
@@ -49,6 +63,12 @@ class PagerPageHolder(
      */
     override val item
         get() = page to extraPage
+
+    /**
+     * 双击缩放是否被禁止，直接读取配置，所以改设置后立刻生效（不需要重建页面）。
+     */
+    override val disableDoubleTapZoom: Boolean
+        get() = viewer.config.disableDoubleTapZoom
 
     /**
      * Loading progress bar to indicate the current progress.
@@ -72,9 +92,34 @@ class PagerPageHolder(
      */
     private var extraLoadJob: Job? = null
 
+    /**
+     * Job waiting for the current page's image enhancement to finish.
+     */
+    private var enhancementRefreshJob: Job? = null
+
+    /** 翻页后等待页面停留的延迟任务：期间再次翻页则取消，避免反复打断增强。 */
+    private var enhancementSettleJob: Job? = null
+
+    /**
+     * 当前画面上是否已经是增强成品。用来避免重复 setImage：重新设置会让 SSIV 先清空画面，
+     * 表现为翻页后闪一下。
+     */
+    private var showingEnhancedImage = false
+
+    /** 本页增强完成回调在 [ImageEnhancer] 里的登记 key；null 表示尚未登记。 */
+    private var enhancementPageKey: String? = null
+
     init {
         loadJob = scope.launch { loadPageAndProcessStatus(1) }
         extraLoadJob = scope.launch { loadPageAndProcessStatus(2) }
+        // 增强总开关变化时平滑重载当前页（开启改用成品、关闭回到原图），避免整页闪黑
+        scope.launch {
+            Injekt.get<ReaderPreferences>().realCuganEnabled().changes().drop(1).collect {
+                if (isVisibleOnScreen() && page.status == Page.State.Ready) {
+                    setImage()
+                }
+            }
+        }
     }
 
     /**
@@ -87,6 +132,11 @@ class PagerPageHolder(
         loadJob = null
         extraLoadJob?.cancel()
         extraLoadJob = null
+        enhancementRefreshJob?.cancel()
+        enhancementRefreshJob = null
+        // 注销增强完成回调，避免残留（视图已分离，不应再被刷新）
+        enhancementPageKey?.let(ImageEnhancer::removeOnEnhancedListener)
+        enhancementPageKey = null
     }
 
     private fun initProgressIndicator() {
@@ -161,13 +211,42 @@ class PagerPageHolder(
      * Called when the page is ready.
      */
     private suspend fun setImage() {
+        // 登记「增强完成即刷新」回调，覆盖后台预载页：增强一完成就把该页换成增强图。
+        if (ReaderEnhancement.isEnabled()) {
+            ensureEnhancementRefreshRegistered()
+        }
+        // 已经有画面时改用「底层插入」换图：原图留在上层遮挡，新图加载完成后才替代它，
+        // 这样切换增强开关、切换成品时都不会闪黑
+        if (hasReadyImage) {
+            setNextImageInsertAtBottom()
+        }
         if (extraPage == null) {
             progressIndicator?.setProgress(0)
         } else {
             progressIndicator?.setProgress(95)
         }
 
-        val streamFn = page.stream ?: return
+        // 图像增强：已有原生放大结果时直接显示放大后的图片（未开启增强时行为与之前一致）
+        val enhancedFile = ReaderEnhancement.cachedFile(context, page)
+        // 关闭增强后 page.stream 可能仍指向旧的增强成品，这里回退到原图流，让画面回到原图
+        if (enhancedFile == null && page.usingEnhancedStream) {
+            page.enhancementStream?.let {
+                page.stream = it
+                page.usingEnhancedStream = false
+            }
+        }
+        // 页面流本身可能已经是增强成品（加载时命中过缓存），此时即使再次查询未命中也要保留水印
+        showingEnhancedImage = enhancedFile != null || page.usingEnhancedStream
+        // 增强成品在图片左上角叠加水印；双页合并显示时两张图片各显示一个
+        setSuperResolutionWatermark(
+            visible = showingEnhancedImage,
+            pages = if (extraPage != null && !viewer.config.dualPageSplit) 2 else 1,
+        )
+        val streamFn: () -> InputStream = if (enhancedFile != null) {
+            { enhancedFile.inputStream() }
+        } else {
+            page.stream ?: return
+        }
         val streamFn2 = extraPage?.stream
 
         try {
@@ -212,6 +291,11 @@ class PagerPageHolder(
                     pageBackground = background
                 }
                 removeErrorLayout()
+            }
+
+            // 图像增强：还没有放大结果时触发高优先级处理，处理完成后刷新画面
+            if (enhancedFile == null) {
+                requestEnhancement()
             }
         } catch (e: Throwable) {
             logcat(LogPriority.ERROR, e)
@@ -310,6 +394,9 @@ class PagerPageHolder(
 
         val isLTR = (viewer !is R2LPagerViewer) xor viewer.config.invertDoublePages
         val centerMargin = calculateCenterMargin(imageBitmap.height, imageBitmap2.height)
+
+        // 请求了换位动画则在此就地触发（对滑左右两页），用的是两张源页位图
+        maybePlaySwap(imageBitmap, imageBitmap2)
 
         imageSource.close()
         imageSource2.close()
@@ -419,6 +506,235 @@ class PagerPageHolder(
     }
 
     /**
+     * 原位重合并当前双页（反转顺序用）：把新合并图插到最底层加载，原图留在上层，
+     * 完成后才替换——不会清空视图，因此不会出现黑屏。不清任何后台队列。
+     */
+    fun refreshInverted() {
+        if (page.status != Page.State.Ready) return
+        scope.launch {
+            setNextImageInsertAtBottom()
+            setImage()
+        }
+    }
+
+    /**
+     * 请求换位动画：下一次 [mergePages] 生成双页时，用两张源页位图播放"左页向右、右页向左"的对滑。
+     * [pageOnRight] 表示换位前第 1 页（page）当前显示在右侧（即旧顺序已反转）。
+     */
+    @Volatile
+    private var swapPending = false
+    @Volatile
+    private var swapPageOnRight = false
+
+    fun requestSwapAnimation(pageOnRight: Boolean) {
+        swapPending = true
+        swapPageOnRight = pageOnRight
+    }
+
+    /** 用两张源页位图播放对滑换位动画（在 UI 线程调用）。 */
+    private fun playSwapAnimation(pageBmp: Bitmap, extraBmp: Bitmap) {
+        val w = width
+        val h = height
+        val half = w / 2
+        val leftBmp = if (swapPageOnRight) extraBmp else pageBmp
+        val rightBmp = if (swapPageOnRight) pageBmp else extraBmp
+        if (w <= 0 || h <= 0 || half < 1) {
+            pageBmp.recycle()
+            extraBmp.recycle()
+            return
+        }
+        val left = ImageView(context).apply {
+            setImageBitmap(leftBmp)
+            scaleType = ImageView.ScaleType.FIT_XY
+            layoutParams = FrameLayout.LayoutParams(half, h)
+        }
+        val right = ImageView(context).apply {
+            setImageBitmap(rightBmp)
+            scaleType = ImageView.ScaleType.FIT_XY
+            layoutParams = FrameLayout.LayoutParams(w - half, h)
+            x = half.toFloat()
+        }
+        // 在最下面垫一层不透明覆盖，挡住下层漫画层（反转重合并可能新建 SSIV，alpha 方案不可靠）
+        val cover = View(context).apply {
+            layoutParams = FrameLayout.LayoutParams(w, h)
+            setBackgroundColor(viewer.config.pageCanvasColor)
+        }
+        addView(cover)
+        addView(left)
+        addView(right)
+        // 左半 -> 右侧；右半 -> 左侧（对滑）
+        left.animate()
+            .x((w - half).toFloat())
+            .setDuration(450L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+        right.animate()
+            .x(0f)
+            .setDuration(450L)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction {
+                removeView(cover)
+                removeView(left)
+                removeView(right)
+                pageBmp.recycle()
+                extraBmp.recycle()
+            }
+            .start()
+    }
+
+    /** 生成双页结束后，若请求了换位动画则就地触发（IO 线程调用，post 到 UI 线程）。 */
+    private fun maybePlaySwap(imageBitmap: Bitmap, imageBitmap2: Bitmap) {
+        if (!swapPending) return
+        swapPending = false
+        // 拷贝两份，避免与 mergeBitmaps 对原图的回收冲突
+        val pageCopy = imageBitmap.copy(Bitmap.Config.ARGB_8888, false)
+        val extraCopy = imageBitmap2.copy(Bitmap.Config.ARGB_8888, false)
+        if (pageCopy == null || extraCopy == null) return
+        post { playSwapAnimation(pageCopy, extraCopy) }
+    }
+
+    /**
+     * 图像增强：当前页变为可见页，按高优先级排队处理。
+     */
+    override fun onPageSelected(forward: Boolean) {
+        super.onPageSelected(forward)
+        onEnhancementTargetChanged()
+        requestEnhancement()
+    }
+
+    /**
+     * 当前可见页变化时，通知增强器更新「当前目标页」窗口，让队列按距新目标最近优先。
+     * 只重排优先级，绝不打断正在进行的增强任务（需求 1）。
+     * 注意：只在真正的翻页（onPageSelected）时触发，避免后台预载页把目标页带偏。
+     */
+    private fun onEnhancementTargetChanged() {
+        if (!ReaderEnhancement.isEnabled()) return
+        if (!isEnhancementTargetActive(page)) return
+        ImageEnhancer.updateFocus(
+            page.index,
+            page.enhancementKeySuffix,
+            extraPage?.index,
+            extraPage?.enhancementKeySuffix.orEmpty(),
+        )
+    }
+
+    /**
+     * 判断某页是否属于「应当执行增强」的章节。
+     * 常规情况：章节 == 当前活跃章（viewerChapters.currChapter）。
+     * 跨过渡页进入下一章首页时：currChapter 由 loadNewChapter 异步更新、此刻仍指向旧章，
+     * 但只要该页已是当前聚焦页（viewer.currentPage），就视为已切入新章并放行，让第一页增强自动开启；
+     * 其余非当前章页面（过渡页期间被预载进 ViewPager、但仍未聚焦的后台页）照旧拦截。
+     */
+    private fun isEnhancementTargetActive(page: ReaderPage): Boolean {
+        val activeChapter = viewer.activity.viewModel.state.value.viewerChapters?.currChapter
+        if (activeChapter != null && page.chapter == activeChapter) return true
+        return (viewer.currentPage as? ReaderPage)?.chapter == page.chapter
+    }
+
+    /**
+     * 确保本页已登记「增强完成即刷新」回调（只登记一次）。
+     * 回调在主线程触发：增强产物落盘后立即把画面换成增强图（后台页也刷新），
+     * 翻到该页时无需再等解码，水印与增强图同步立即可见。
+     */
+    private fun ensureEnhancementRefreshRegistered() {
+        if (enhancementPageKey != null) return
+        val mangaId = viewer.activity.viewModel.manga?.id ?: return
+        val chapterId = page.chapter.chapter.id ?: return
+        val key = "${mangaId}_${chapterId}_${page.index}_${page.enhancementKeySuffix}"
+        enhancementPageKey = key
+        ImageEnhancer.addOnEnhancedListener(key) {
+            scope.launch { onEnhancementDone() }
+        }
+    }
+
+    /** 增强完成回调：若状态就绪且产物已落盘，把画面替换为增强图（底部插入不闪黑）。 */
+    private suspend fun onEnhancementDone() {
+        if (page.status != Page.State.Ready || showingEnhancedImage) return
+        if (ReaderEnhancement.cachedFile(context, page) == null) return
+        setNextImageInsertAtBottom()
+        setImage()
+    }
+
+    /**
+     * 图像增强：把当前页以高优先级入队，并在处理完成后刷新一次画面（换成放大后的图片）。
+     * 未开启增强时不做任何事。
+     */
+    private fun requestEnhancement() {
+        if (!ReaderEnhancement.isEnabled()) {
+            // 增强已关闭：本页可能还停留在关闭前预加载好的增强成品上，
+            // 切回来时平滑回退到原图（否则会一直显示增强图和水印）
+            if (showingEnhancedImage || page.usingEnhancedStream) {
+                scope.launch { setImage() }
+            }
+            return
+        }
+        // 只处理当前活跃章（或跨章后已聚焦的新章）的页面：过渡黑页期间被预载进 ViewPager 的非当前
+        // 章页面不应加入增强队列，但跨过渡页聚焦到下一章首页时需放行让其自动开启增强。
+        if (!isEnhancementTargetActive(page)) return
+        val mangaId = viewer.activity.viewModel.manga?.id ?: return
+        val chapterId = page.chapter.chapter.id ?: return
+
+        // 按「预加载页数」提前排队后续页的增强，翻页时直接命中成品
+        ReaderEnhancement.requestPreload(context, page)
+
+        // 画面已经是放大成品时既不用排队也不用刷新：
+        // 再走一次 setImage 只会让 SSIV 清空重载，翻页时表现为闪一下。
+        if (showingEnhancedImage) return
+
+        // 增强成品已就绪但画面仍是原图（后台预载时增强尚未完成，holder 先加载了原图）：
+        // 翻到这一页时直接换成增强图，不必再等停留与轮询的延迟，避免先显示原图再切换。
+        if (page.status == Page.State.Ready && ReaderEnhancement.cachedFile(context, page) != null) {
+            // 新图插到最底层加载，原图留在上层，加载完成后才移除，因此不会闪黑
+            setNextImageInsertAtBottom()
+            scope.launch { setImage() }
+            return
+        }
+
+        // 翻页后先等 1 秒：若期间没有再次翻页，再把当前页（双页时含配对页）插队处理，
+        // 避免快速连续翻页时反复打断正在进行的增强任务。
+        enhancementSettleJob?.cancel()
+        enhancementSettleJob = scope.launch {
+            delay(ENHANCEMENT_SETTLE_DELAY_MS)
+            if (!isVisibleOnScreen()) return@launch
+
+            // 需求 1：登记插队（提升可见页优先级 + 待重建预加载窗口）。登记时不做任何打断，
+            // 真正提升/重建要等当前正在增强的图片完成后由 worker 执行（见 ImageEnhancer.processRequest.finally）。
+            ImageEnhancer.settle(
+                page.index,
+                page.enhancementKeySuffix,
+                extraPage?.index,
+                extraPage?.enhancementKeySuffix.orEmpty(),
+            )
+            // 仍以高优先级入队，但 preempt=false：不打断正在增强的任务，仅让本页在队列中排最前
+            ReaderEnhancement.request(context, page, highPriority = true, preempt = false)
+            val secondary = extraPage
+            if (secondary != null) {
+                ReaderEnhancement.request(context, secondary, highPriority = true, preempt = false)
+            }
+
+            enhancementRefreshJob?.cancel()
+            enhancementRefreshJob = scope.launch {
+                while (isActive) {
+                    delay(ENHANCEMENT_POLL_INTERVAL_MS)
+                    if (ImageEnhancer.hasRequest(mangaId, chapterId, page.index, page.enhancementKeySuffix)) {
+                        continue
+                    }
+                    // 处理结束后已经生成放大结果则重新加载页面，否则放弃等待
+                    if (!showingEnhancedImage &&
+                        page.status == Page.State.Ready &&
+                        ReaderEnhancement.cachedFile(context, page) != null
+                    ) {
+                        // 新图先插到最底层加载，原图留在上层遮挡，加载完成后才移除原图，避免黑屏
+                        setNextImageInsertAtBottom()
+                        setImage()
+                    }
+                    return@launch
+                }
+            }
+        }
+    }
+
+    /**
      * Called when an image fails to decode.
      */
     override fun onImageLoadError(error: Throwable?) {
@@ -472,3 +788,9 @@ class PagerPageHolder(
         errorLayout = null
     }
 }
+
+/** 图像增强处理完成后刷新画面的轮询间隔。 */
+private const val ENHANCEMENT_POLL_INTERVAL_MS = 700L
+
+/** 翻页后停留多久才把当前页提到最高优先级处理，避免快速翻页时反复打断增强。 */
+private const val ENHANCEMENT_SETTLE_DELAY_MS = 1000L

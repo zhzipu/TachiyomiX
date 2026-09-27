@@ -20,4 +20,6 @@ interface ExtensionStoreRepository {
     fun getCountAsFlow(): Flow<Long>
 
     suspend fun remove(indexUrl: String)
+
+    suspend fun setEnabled(indexUrl: String, isEnabled: Boolean)
 }

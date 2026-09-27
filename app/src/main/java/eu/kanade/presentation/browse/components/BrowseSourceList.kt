@@ -2,8 +2,10 @@ package eu.kanade.presentation.browse.components
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -28,10 +30,28 @@ import tachiyomi.presentation.core.util.plus
 fun BrowseSourceList(
     mangaList: LazyPagingItems<StateFlow</* SY --> */Pair<Manga, RaisedSearchMetadata?>/* SY <-- */>>,
     contentPadding: PaddingValues,
+    // SY -->
+    selection: List<Manga> = emptyList(),
+    // SY <--
+    state: LazyListState,
+    // SY -->
+    // 递增时通知当前页面的列表回到顶部
+    scrollToTopNonce: Int = 0,
+    isCurrentPage: Boolean = true,
+    // SY <--
     onMangaClick: (Manga) -> Unit,
     onMangaLongClick: (Manga) -> Unit,
 ) {
+    // SY -->
+    // 点击顶部图源名称时，列表带动画回到顶部
+    LaunchedEffect(scrollToTopNonce) {
+        if (scrollToTopNonce > 0 && isCurrentPage) {
+            state.animateScrollToItem(0)
+        }
+    }
+    // SY <--
     LazyColumn(
+        state = state,
         contentPadding = contentPadding + PaddingValues(vertical = 8.dp),
     ) {
         item {
@@ -45,12 +65,14 @@ fun BrowseSourceList(
             val pair by mangaList[index]?.collectAsState() ?: return@items
             val manga = pair.first
             val metadata = pair.second
+            val isSelected = selection.any { it.id == manga.id }
             // SY <--
 
             BrowseSourceListItem(
                 manga = manga,
                 // SY -->
                 metadata = metadata,
+                isSelected = isSelected,
                 // SY <--
                 onClick = { onMangaClick(manga) },
                 onLongClick = { onMangaLongClick(manga) },
@@ -70,11 +92,13 @@ private fun BrowseSourceListItem(
     manga: Manga,
     // SY -->
     metadata: RaisedSearchMetadata?,
+    isSelected: Boolean = false,
     // SY <--
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = onClick,
 ) {
     MangaListItem(
+        isSelected = isSelected,
         title = manga.title,
         coverData = MangaCover(
             mangaId = manga.id,

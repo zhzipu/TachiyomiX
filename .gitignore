@@ -19,3 +19,42 @@ local.properties
 google-services.json
 /app/src/main/assets/client_secrets.json
 *.apk
+
+# TachiyomiX：插件与模型包（独立分发，不随主仓库发布）
+/model-packs/
+/modelpacks/
+
+# 第三方预编译 SDK
+/third_party/
+
+# 本地预编译依赖（需自行下载）
+/app/libs/
+/app/src/main/jniLibs/
+
+# Native 构建缓存
+/app/.cxx/
+
+# 工具与本地目录
+/.trae/
+/.workbuddy/
+/apks/
+
+# 日志
+*.log
+
+# 调试产物与临时代码
+/ui.xml
+/ui2.xml
+/ui_dump.xml
+/tachiyomi_sy_crash_logs.txt
+/_diag_sync.py
+/_replace_icon.py
+/sy_sync.proto
+/sy_sync.proto.gz
+
+# 临时图片
+/screenshot.png
+/screen.png
+/screen2.png
+/screen3.png
+/new_icon.png

@@ -11,6 +11,9 @@ import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
 import eu.kanade.tachiyomi.data.backup.models.BackupMergedMangaReference
 import eu.kanade.tachiyomi.data.backup.models.BackupTracking
+// SY -->
+import eu.kanade.tachiyomi.data.upload.isDownloadCategory
+// SY <--
 import exh.EXHMigrations
 import tachiyomi.data.Database
 import tachiyomi.data.MemoColumnAdapter
@@ -371,11 +374,26 @@ class MangaRestorer(
         }
 
         if (mangaCategoriesToUpdate.isNotEmpty()) {
+            // SY -->
+            // 「下载」是本机状态：`BackupCreator` 不会把它写进备份/同步数据，
+            // 所以这里要把它当成「远端根本没提过」，而不是「远端说它不在下载里」——
+            // 下面这个 delete + insert 是整体覆盖，不补回来的话，用户同步一次
+            // 就会丢掉这本漫画的「下载」成员关系（本地文件还在，页签里却看不见）。
+            // 必须赶在事务里删除之前读出来。
+            val downloadCategoryId = getCategories.await(manga.id)
+                .firstOrNull { it.isDownloadCategory }
+                ?.id
+                ?.takeIf { id -> mangaCategoriesToUpdate.none { it.second == id } }
+            // SY <--
+
             database.transaction {
                 database.mangas_categoriesQueries.deleteMangaCategoryByMangaId(manga.id)
                 mangaCategoriesToUpdate.forEach { (mangaId, categoryId) ->
                     database.mangas_categoriesQueries.insert(mangaId, categoryId)
                 }
+                // SY -->
+                downloadCategoryId?.let { database.mangas_categoriesQueries.insert(manga.id, it) }
+                // SY <--
             }
         }
     }

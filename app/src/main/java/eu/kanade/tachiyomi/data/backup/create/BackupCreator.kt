@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.backup.create
 
 import android.content.Context
 import android.net.Uri
+import app.cash.sqldelight.async.coroutines.awaitAsList
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.data.backup.BackupFileValidator
@@ -19,6 +20,12 @@ import eu.kanade.tachiyomi.data.backup.models.BackupPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupSavedSearch
 import eu.kanade.tachiyomi.data.backup.models.BackupSource
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
+// SY -->
+import eu.kanade.tachiyomi.data.upload.DownloadCategory
+import eu.kanade.tachiyomi.data.upload.isDownloadCategory
+import tachiyomi.data.Database
+import tachiyomi.domain.category.interactor.GetCategories
+// SY <--
 import kotlinx.serialization.protobuf.ProtoBuf
 import logcat.LogPriority
 import okio.buffer
@@ -48,6 +55,10 @@ class BackupCreator(
     private val getFavorites: GetFavorites = Injekt.get(),
     private val backupPreferences: BackupPreferences = Injekt.get(),
     private val mangaRepository: MangaRepository = Injekt.get(),
+    // SY -->
+    private val database: Database = Injekt.get(),
+    private val getCategories: GetCategories = Injekt.get(),
+    // SY <--
 
     private val categoriesBackupCreator: CategoriesBackupCreator = CategoriesBackupCreator(),
     private val mangaBackupCreator: MangaBackupCreator = MangaBackupCreator(),
@@ -136,14 +147,36 @@ class BackupCreator(
     suspend fun backupCategories(options: BackupOptions): List<BackupCategory> {
         if (!options.categories) return emptyList()
 
-        return categoriesBackupCreator()
+        // SY -->
+        // 「下载」不进备份：它是本机的下载状态，同步到别的设备只会多出一个空壳页签。
+        // 名字比较等同于 `Category.isDownloadCategory`（BackupCategory 不是 Category）。
+        return categoriesBackupCreator().filterNot { it.name == DownloadCategory.NAME }
+        // SY <--
     }
 
     suspend fun backupMangas(mangas: List<Manga>, options: BackupOptions): List<BackupManga> {
         if (!options.libraryEntries) return emptyList()
 
-        return mangaBackupCreator(mangas, options)
+        // SY -->
+        // 「下载」里的漫画整本排除：收藏状态、其它分类、阅读进度都不发出去。
+        // 必须和上面 backupCategories 的排除**成对**，否则远端会拿到一个不存在的分类 order。
+        // 恢复侧的对偶逻辑：`MangaRestorer.restoreCategories` 保住本机的「下载」成员关系，
+        // `SyncManager` 里删「远端没有的本地分类」时也会跳过「下载」。
+        val downloadMangaIds = downloadCategoryMangaIds()
+        return mangaBackupCreator(mangas.filterNot { it.id in downloadMangaIds }, options)
+        // SY <--
     }
+
+    // SY -->
+    /** 「下载」分类的成员（漫画 id）。分类不存在时是空集。 */
+    private suspend fun downloadCategoryMangaIds(): Set<Long> {
+        val categoryId = getCategories.await().firstOrNull { it.isDownloadCategory }?.id ?: return emptySet()
+        return database.mangas_categoriesQueries
+            .getMangaIdsByCategoryId(categoryId)
+            .awaitAsList()
+            .toSet()
+    }
+    // SY <--
 
     fun backupSources(mangas: List<BackupManga>): List<BackupSource> {
         return sourcesBackupCreator(mangas)

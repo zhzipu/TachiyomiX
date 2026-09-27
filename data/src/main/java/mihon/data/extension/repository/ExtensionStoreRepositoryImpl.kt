@@ -33,27 +33,30 @@ class ExtensionStoreRepositoryImpl(
             contactDiscord = null,
             isLegacy = false,
             extensionListUrl = null,
+            isEnabled = true,
         )
     }
 
     override suspend fun refreshAll() {
         try {
-            database.extension_storeQueries.getAll().awaitAsList().forEach { store ->
-                service.fetch(store.index_url)
-                    .mapCatching {
-                        database.transaction {
-                            upsert(it)
-                            if (store.index_url != it.indexUrl) {
-                                database.extension_storeQueries.delete(store.index_url)
+            database.extension_storeQueries.getAll().awaitAsList()
+                .filter { it.is_enabled }
+                .forEach { store ->
+                    service.fetch(store.index_url)
+                        .mapCatching {
+                            database.transaction {
+                                upsert(it)
+                                if (store.index_url != it.indexUrl) {
+                                    database.extension_storeQueries.delete(store.index_url)
+                                }
                             }
                         }
-                    }
-                    .onFailure {
-                        logcat(LogPriority.ERROR, it) {
-                            "Failed to refresh extension store '${store.name} (${store.index_url})'"
+                        .onFailure {
+                            logcat(LogPriority.ERROR, it) {
+                                "Failed to refresh extension store '${store.name} (${store.index_url})'"
+                            }
                         }
-                    }
-            }
+                }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
         }
@@ -69,21 +72,24 @@ class ExtensionStoreRepositoryImpl(
             contactDiscord = store.contact.discord,
             isLegacy = store.isLegacy,
             extensionListUrl = store.extensionListUrl,
+            isEnabled = store.isEnabled,
         )
     }
 
     override suspend fun fetchExtensions(): List<Extension.Available> {
         return try {
             supervisorScope {
-                database.extension_storeQueries.getAll(::extensionStoreMapper).awaitAsList().map { store ->
-                    async {
-                        service.getExtensions(store).onFailure {
-                            this@ExtensionStoreRepositoryImpl.logcat(LogPriority.ERROR, it) {
-                                "Failed to fetch extensions for store '${store.name} (${store.indexUrl})'"
+                database.extension_storeQueries.getAll(::extensionStoreMapper).awaitAsList()
+                    .filter { it.isEnabled }
+                    .map { store ->
+                        async {
+                            service.getExtensions(store).onFailure {
+                                this@ExtensionStoreRepositoryImpl.logcat(LogPriority.ERROR, it) {
+                                    "Failed to fetch extensions for store '${store.name} (${store.indexUrl})'"
+                                }
                             }
                         }
                     }
-                }
                     .awaitAll()
                     .flatMap { it.getOrDefault(emptyList()) }
             }
@@ -111,6 +117,10 @@ class ExtensionStoreRepositoryImpl(
         database.extension_storeQueries.delete(indexUrl)
     }
 
+    override suspend fun setEnabled(indexUrl: String, isEnabled: Boolean) {
+        database.extension_storeQueries.updateEnabled(indexUrl = indexUrl, isEnabled = isEnabled)
+    }
+
     private fun extensionStoreMapper(
         indexUrl: String,
         name: String,
@@ -120,6 +130,7 @@ class ExtensionStoreRepositoryImpl(
         contactDiscord: String?,
         isLegacy: Boolean,
         extensionListUrl: String?,
+        isEnabled: Boolean,
     ): ExtensionStore = ExtensionStore(
         indexUrl = indexUrl,
         name = name,
@@ -131,5 +142,6 @@ class ExtensionStoreRepositoryImpl(
         ),
         isLegacy = isLegacy,
         extensionListUrl = extensionListUrl,
+        isEnabled = isEnabled,
     )
 }

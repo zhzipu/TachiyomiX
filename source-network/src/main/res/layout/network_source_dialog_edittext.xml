@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  网络图源设置里 EditTextPreference 的对话框布局。
+
+  为什么要自带一份（而不是用 androidx/framework 的默认 dialogLayout）：
+
+  EditTextPreferenceDialogFragmentCompat.onBindDialogView 强制要求对话框布局里
+  含有 android:id/edit 的 EditText，否则抛：
+
+      IllegalStateException: Dialog view must contain an EditText with id @android:id/edit
+
+  Android 16 的 framework 布局 res/layout/preference_dialog_edittext(_material).xml
+  里只剩一个 TextView（android:id/message），EditText 已经没有了。
+  一旦样式解析回退到 framework（例如用 Application 级 Context 构造 Preference，
+  主题里没有 androidx 的 editTextPreferenceStyle），对话框就会套上那个布局并崩溃。
+
+  所以这里显式指定本布局，内容对齐 androidx 的 preference_dialog_edittext，
+  保证 android:id/message 与 android:id/edit 两个 id 都在。
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layout_marginTop="48dp"
+    android:layout_marginBottom="48dp"
+    android:overScrollMode="ifContentScrolls">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@android:id/message"
+            style="?android:attr/textAppearanceSmall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="24dp"
+            android:layout_marginRight="24dp"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:layout_marginBottom="48dp"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <EditText
+            android:id="@android:id/edit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="20dp"
+            android:layout_marginRight="20dp"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:minHeight="48dp" />
+
+    </LinearLayout>
+
+</ScrollView>

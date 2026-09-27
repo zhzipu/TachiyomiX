@@ -1,11 +1,20 @@
 package eu.kanade.presentation.library.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewLightDark
+import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
 import tachiyomi.presentation.core.components.Badge
 
@@ -47,6 +56,26 @@ internal fun LanguageBadge(
     }
 }
 
+/**
+ * Badge showing the source name on the manga cover, e.g. "MangaDex".
+ */
+@Composable
+internal fun SourceNameBadge(sourceName: String, modifier: Modifier = Modifier) {
+    Text(
+        text = sourceName,
+        modifier = modifier
+            .widthIn(max = 96.dp)
+            .clip(MaterialTheme.shapes.extraSmall)
+            .background(MaterialTheme.colorScheme.secondary)
+            .padding(horizontal = 4.dp, vertical = 1.dp),
+        color = MaterialTheme.colorScheme.onSecondary,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        style = MaterialTheme.typography.bodySmall,
+    )
+}
+
 @PreviewLightDark
 @Composable
 private fun BadgePreview() {
@@ -56,6 +85,7 @@ private fun BadgePreview() {
             UnreadBadge(count = 10)
             LanguageBadge(isLocal = true, sourceLanguage = "EN")
             LanguageBadge(isLocal = false, sourceLanguage = "EN")
+            SourceNameBadge(sourceName = "MangaDex")
         }
     }
 }

@@ -130,15 +130,6 @@ internal class PermissionStep : OnboardingStep {
                 granted = crashlytics,
                 onToggleChange = crashlyticsPref::set,
             )
-
-            val analyticsPref = privacyPreferences.analytics
-            val analytics by analyticsPref.collectAsState()
-            PermissionSwitch(
-                title = stringResource(MR.strings.onboarding_permission_analytics),
-                subtitle = stringResource(MR.strings.onboarding_permission_analytics_description),
-                granted = analytics,
-                onToggleChange = analyticsPref::set,
-            )
         }
     }
 

@@ -43,6 +43,9 @@ import tachiyomi.domain.source.model.StubSource
 import tachiyomi.domain.source.repository.StubSourceRepository
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.source.local.LocalSource
+// SY -->
+import tachiyomi.source.network.NetworkSource
+// SY <--
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
@@ -92,6 +95,9 @@ class AndroidSourceManager(
                                 sourcePreferences.allowLocalSourceHiddenFolders::get,
                                 // SY <--
                             ),
+                            // SY -->
+                            NetworkSource.ID to NetworkSource(context),
+                            // SY <--
                         ),
                     )
 

@@ -21,6 +21,7 @@ class ExtensionStoreRestorer(
             contactDiscord = backupStore.contactDiscord,
             isLegacy = backupStore.isLegacy ?: true,
             extensionListUrl = backupStore.extensionListUrl,
+            isEnabled = backupStore.isEnabled ?: true,
         )
     }
 }

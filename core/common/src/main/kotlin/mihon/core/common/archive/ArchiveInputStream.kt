@@ -15,11 +15,22 @@ class ArchiveInputStream(
     // SY -->
     encrypted: Boolean,
     // SY <--
+    // SY -->
+    private val onClose: (() -> Unit)? = null,
+    private val onOpen: (() -> Unit)? = null,
+    // SY <--
 ) : InputStream() {
     private val lock = Any()
 
     @Volatile
     private var isClosed = false
+
+    // SY -->
+    // 标记 acquire 是否已执行，确保 close() 只在与 onOpen 配对时触发 onClose，
+    // 避免 readOpenMemoryUnsafe 失败路径（未 acquire 却 close）把引用计数减成负数。
+    @Volatile
+    private var acquired = false
+    // SY <--
 
     private val archive = Archive.readNew()
 
@@ -34,6 +45,11 @@ class ArchiveInputStream(
             Archive.readSupportFilterAll(archive)
             Archive.readSupportFormatAll(archive)
             Archive.readOpenMemoryUnsafe(archive, buffer, size)
+            // SY -->
+            // archive 已成功打开、开始持有 mmap 地址的引用，通知 ArchiveReader 计数 +1。
+            acquired = true
+            onOpen?.invoke()
+            // SY <--
         } catch (e: ArchiveException) {
             close()
             throw e
@@ -66,6 +82,13 @@ class ArchiveInputStream(
         }
 
         Archive.readFree(archive)
+
+        // SY -->
+        // 只有成功 open（acquired）过的流才负责把引用计数 -1，避免失败路径减成负数。
+        if (acquired) {
+            onClose?.invoke()
+        }
+        // SY <--
     }
 
     fun getNextEntry(): MihonArchiveEntry? {

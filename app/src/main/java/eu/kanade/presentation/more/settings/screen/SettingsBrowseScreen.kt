@@ -99,6 +99,19 @@ object SettingsBrowseScreen : SearchableSettings {
             Preference.PreferenceGroup(
                 title = stringResource(MR.strings.label_sources),
                 preferenceItems = listOf(
+                    // SY -->
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.sourceHomePage,
+                        entries = mapOf(
+                            UiPreferences.SourceHomePage.NAVIGATION to
+                                stringResource(SYMR.strings.pref_source_home_page_navigation),
+                            UiPreferences.SourceHomePage.LATEST to stringResource(MR.strings.latest),
+                            UiPreferences.SourceHomePage.BROWSE to stringResource(MR.strings.browse),
+                        ),
+                        title = stringResource(SYMR.strings.pref_source_home_page),
+                        subtitle = stringResource(SYMR.strings.pref_source_home_page_summery),
+                    ),
+                    // SY <--
                     Preference.PreferenceItem.SwitchPreference(
                         preference = sourcePreferences.hideInLibraryItems,
                         title = stringResource(MR.strings.pref_hide_in_library_items),

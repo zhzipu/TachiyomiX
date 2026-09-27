@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Router
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Storage
@@ -108,21 +109,26 @@ object SettingsMainScreen : Screen() {
                 val state = rememberLazyListState()
                 // SY -->
                 val items = items.filter { it.screen !is SearchableSettings || it.screen.isEnabled() }
-                // SY <--
+                // 「关于」在平板上会再嵌一层设置页，此时栈顶不在本列表内，
+                // 取不到索引要当 null 处理，否则 animateScrollToItem(-1) 会直接崩溃
                 val indexSelected = if (twoPane) {
                     items.indexOfFirst { it.screen::class == navigator.items.first()::class }
-                        .also {
+                        .takeIf { it >= 0 }
+                        .also { index ->
                             LaunchedEffect(Unit) {
-                                state.animateScrollToItem(it)
-                                if (it > 0) {
-                                    // Lift scroll
-                                    topBarState.contentOffset = topBarState.heightOffsetLimit
+                                if (index != null) {
+                                    state.animateScrollToItem(index)
+                                    if (index > 0) {
+                                        // Lift scroll
+                                        topBarState.contentOffset = topBarState.heightOffsetLimit
+                                    }
                                 }
                             }
                         }
                 } else {
                     null
                 }
+                // SY <--
 
                 LazyColumn(
                     state = state,
@@ -241,6 +247,12 @@ object SettingsMainScreen : Screen() {
         ),
         // SY <--
         Item(
+            titleRes = SYMR.strings.pref_category_proxy,
+            subtitleRes = SYMR.strings.pref_proxy_summary,
+            icon = Icons.Outlined.Router,
+            screen = SettingsProxyScreen,
+        ),
+        Item(
             titleRes = MR.strings.pref_category_advanced,
             subtitleRes = MR.strings.pref_advanced_summary,
             icon = Icons.Outlined.Code,
@@ -248,11 +260,10 @@ object SettingsMainScreen : Screen() {
         ),
         Item(
             titleRes = MR.strings.pref_category_about,
-            subtitleRes = StringResource(0),
-            formatSubtitle = {
-                "${stringResource(MR.strings.app_name)} ${AboutScreen.getVersionName(withBuildDate = false)}"
-            },
+            subtitleRes = MR.strings.pref_about_summary,
             icon = Icons.Outlined.Info,
+            // 直接指向 AboutScreen：若用 SettingsScreen(About)，平板上会再嵌一层两栏设置页，
+            // 造成左侧列表重复嵌套（索引取不到、Voyager 的 screen key 冲突）
             screen = AboutScreen,
         ),
     )

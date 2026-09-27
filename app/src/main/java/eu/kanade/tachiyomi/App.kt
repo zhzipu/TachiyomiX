@@ -37,7 +37,9 @@ import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.sync.SyncPreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.setAppCompatDelegateThemeMode
+import eu.kanade.tachiyomi.clash.ClashManager
 import eu.kanade.tachiyomi.core.security.PrivacyPreferences
+import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.crash.CrashActivity
 import eu.kanade.tachiyomi.crash.GlobalExceptionHandler
 import eu.kanade.tachiyomi.data.coil.BufferedSourceFetcher
@@ -55,11 +57,14 @@ import eu.kanade.tachiyomi.di.PreferenceModule
 import eu.kanade.tachiyomi.di.SYPreferenceModule
 import eu.kanade.tachiyomi.di.importModule
 import eu.kanade.tachiyomi.di.initExpensiveComponents
+import eu.kanade.tachiyomi.network.ClashPreferences
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.ui.base.delegate.SecureActivityDelegate
+import eu.kanade.tachiyomi.ui.reader.spatial.SpatialSceneCache
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.GLUtil
+import eu.kanade.tachiyomi.util.system.LauncherDisguise
 import eu.kanade.tachiyomi.util.system.WebViewUtil
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.system.cancelNotification
@@ -73,6 +78,8 @@ import exh.syDebugVersion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import logcat.LogcatLogger
 import mihon.core.firebase.FirebaseConfig
@@ -101,6 +108,13 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     private val networkPreferences: NetworkPreferences by injectLazy()
 
     private val disableIncognitoReceiver = DisableIncognitoReceiver()
+
+    // SY -->
+    // Set when the app goes to background or the device sleeps, so the Clash
+    // proxy can be reloaded on the next foreground.
+    @Volatile
+    private var wasInBackground = false
+    // SY <--
 
     @SuppressLint("LaunchActivityFromNotification")
     override fun onCreate() {
@@ -132,6 +146,14 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         Injekt.importModule(SYDomainModule())
         InjektKoinBridge.startKoin(this)
         initExpensiveComponents(this)
+
+        // 伪装应用：重放上次选择的桌面别名，保证桌面入口与偏好一致
+        runCatching {
+            LauncherDisguise.apply(
+                applicationContext,
+                Injekt.get<SecurityPreferences>().fakeLauncherIcon.get(),
+            )
+        }
         // SY <--
 
         setupExhLogging() // EXH logging
@@ -143,6 +165,22 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
 
         val scope = ProcessLifecycleOwner.get().lifecycleScope
+
+        // SY -->
+        // Restore the built-in Clash proxy if it was enabled before the process died.
+        scope.launch {
+            val clashPreferences: ClashPreferences = Injekt.get()
+            if (clashPreferences.enabled.get()) {
+                runCatching { Injekt.get<ClashManager>().restart() }
+            }
+        }
+
+        // 应用启动时清空景深场景缓存，避免上次会话的残留结果被复用
+        // （图像增强缓存不在这里清，改由「设置-数据与储存」里的手动清理入口处理）
+        scope.launch(Dispatchers.IO) {
+            SpatialSceneCache.clear(applicationContext)
+        }
+        // SY <--
 
         // Show notification to disable Incognito Mode when it's enabled
         basePreferences.incognitoMode.changes()
@@ -277,10 +315,37 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         if (syncPreferences.isSyncEnabled() && syncTriggerOpt.syncOnAppResume) {
             SyncDataJob.startNow(this@App)
         }
+
+        // SY -->
+        // The embedded mihomo core runs in-process. While the app is backgrounded
+        // or the device sleeps (Doze), the process gets frozen: upstream proxy
+        // connections inside the core time out, and OkHttp keeps reusing stale
+        // pooled connections to the local proxy port, so requests start failing
+        // once the app comes back. Reload the core and drop pooled connections
+        // so the proxy recovers without requiring an app restart.
+        if (wasInBackground) {
+            wasInBackground = false
+            ProcessLifecycleOwner.get().lifecycleScope.launch {
+                val clashPreferences: ClashPreferences = Injekt.get()
+                if (clashPreferences.enabled.get()) {
+                    runCatching { Injekt.get<ClashManager>().restart() }
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            Injekt.get<NetworkHelper>().client.connectionPool.evictAll()
+                        }
+                    }
+                    logcat { "Recovered Clash proxy after background/sleep" }
+                }
+            }
+        }
+        // SY <--
     }
 
     override fun onStop(owner: LifecycleOwner) {
         SecureActivityDelegate.onApplicationStopped()
+        // SY -->
+        wasInBackground = true
+        // SY <--
     }
 
     override fun getPackageName(): String {

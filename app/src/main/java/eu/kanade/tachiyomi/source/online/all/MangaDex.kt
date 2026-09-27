@@ -83,7 +83,7 @@ class MangaDex(delegate: HttpSource, val context: Context) :
 
     override val headers: Headers = delegate.headers.newBuilder()
         .removeAll("User-Agent")
-        .add("User-Agent", "TachiyomiSY v${BuildConfig.VERSION_NAME} (${BuildConfig.APPLICATION_ID})")
+        .add("User-Agent", "TachiyomiX v${BuildConfig.VERSION_NAME} (${BuildConfig.APPLICATION_ID})")
         .build()
 
     override val baseHttpClient: OkHttpClient = delegate.client.newBuilder()

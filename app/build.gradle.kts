@@ -3,6 +3,7 @@ import mihon.gradle.getBuildTime
 import mihon.gradle.getLatestCommitCount
 import mihon.gradle.getLatestCommitSha
 import mihon.gradle.tasks.ReplaceShortcutsPlaceholderTask
+import java.util.Properties
 
 plugins {
     alias(mihonx.plugins.android.application)
@@ -18,21 +19,43 @@ plugins {
     id("com.github.ben-manes.versions")
 }
 
-if (gradle.startParameter.taskRequests.toString().contains("Release")) {
-    pluginManager.apply {
-        apply(libs.plugins.google.services.get().pluginId)
-        apply(libs.plugins.firebase.crashlytics.get().pluginId)
+// ncnn Android Vulkan SDK：优先取 Gradle 属性 / local.properties / 环境变量，其次用仓库内自带的
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use(::load)
     }
 }
+
+val bundledNcnnSdkDir = rootProject.file("third_party/ncnn-20260113-android-vulkan")
+
+val ncnnSdkDir = providers.gradleProperty("ncnnSdkDir").orNull
+    ?: localProperties.getProperty("ncnn.sdk.dir")
+    ?: System.getenv("NCNN_SDK_DIR")
+    ?: bundledNcnnSdkDir.takeIf { it.exists() }?.absolutePath
+
+// Qualcomm AI Runtime（QNN）SDK：用于空间深度模型等 NPU 通路，未配置时原生侧以 MIHON_ENABLE_QNN=0 编译
+val qnnSdkDir = providers.gradleProperty("qnnSdkDir").orNull
+    ?: localProperties.getProperty("qnn.sdk.dir")
+    ?: System.getenv("QNN_SDK_ROOT")
+
+val qnnSdkRoot = qnnSdkDir?.takeIf { it.isNotBlank() }?.let(rootProject::file)
+
+// HTP 架构版本，多值用逗号分隔；CMake 取第一个作为 QNN_HTP_ARCH
+val qnnHtpArchs = (
+    providers.gradleProperty("qnnHtpArchs").orNull
+        ?: localProperties.getProperty("qnn.htp.archs")
+        ?: "73"
+    ).split(',').map(String::trim).filter(String::isNotEmpty).distinct()
 
 android {
     namespace = "eu.kanade.tachiyomi"
 
     defaultConfig {
-        applicationId = "eu.kanade.tachiyomi.sy"
+        applicationId = "com.tachiyomi.x"
 
-        versionCode = 81
-        versionName = "1.13.2"
+        versionCode = getLatestCommitCount().toIntOrNull() ?: 1
+        versionName = "1.0.0"
 
         buildConfigField("String", "UPSTREAM_VERSION", """"0.20.1"""")
 
@@ -42,22 +65,30 @@ android {
         buildConfigField("boolean", "INCLUDE_UPDATER", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        externalNativeBuild {
+            cmake {
+                if (!ncnnSdkDir.isNullOrBlank()) {
+                    arguments += "-DNCNN_SDK_DIR=$ncnnSdkDir"
+                }
+                qnnSdkRoot?.let {
+                    arguments += "-DQNN_SDK_DIR=${it.absolutePath}"
+                    arguments += "-DQNN_HTP_ARCH=${qnnHtpArchs.first()}"
+                }
+            }
+        }
     }
 
     buildTypes {
-        named("debug") {
-            versionNameSuffix = "-${getLatestCommitCount()}"
-            applicationIdSuffix = ".debug"
-            isPseudoLocalesEnabled = true
-        }
         named("release") {
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             isProfileable = true
             setProguardFiles(listOf(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"))
 
-            buildConfigField("String", "BUILD_TIME", "\"${getBuildTime(useLatestCommitTime = true)}\"")
-            buildConfigField("boolean", "INCLUDE_UPDATER", "true")
+            buildConfigField("String", "BUILD_TIME", "\"${getBuildTime(useLatestCommitTime = false)}\"")
+            buildConfigField("boolean", "INCLUDE_UPDATER", "false")
         }
         create("foss") {
             initWith(getByName("release"))
@@ -83,9 +114,6 @@ android {
     sourceSets {
         getByName("release").java.directories.add("src/release/java")
         getByName("foss").java.directories.add("src/foss/java")
-        getByName("debug").java.directories.add("src/debug/java")
-        getByName("benchmark").java.directories.add("src/debug/java")
-        getByName("benchmark").res.directories.add("src/debug/res")
     }
 
     splits {
@@ -99,6 +127,8 @@ android {
 
     packaging {
         jniLibs {
+            // ncnn / JNI 原生库使用传统打包方式，避免解压后 mmap 失败
+            useLegacyPackaging = true
             keepDebugSymbols += listOf(
                 "libandroidx.graphics.path",
                 "libarchive-jni",
@@ -134,6 +164,15 @@ android {
         buildConfig = true
         aidl = true
     }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
+    ndkVersion = "26.1.10909125"
 
     lint {
         abortOnError = false
@@ -176,6 +215,9 @@ dependencies {
     implementation(projects.coreMetadata)
     implementation(projects.sourceApi)
     implementation(projects.sourceLocal)
+    // SY -->
+    implementation(projects.sourceNetwork)
+    // SY <--
     implementation(projects.data)
     implementation(projects.domain)
     implementation(projects.presentationCore)
@@ -188,7 +230,6 @@ dependencies {
     implementation(libs.androidx.compose.materialIcons)
     implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.compose.animationGraphics)
-    debugImplementation(libs.androidx.compose.uiTooling)
     implementation(libs.androidx.compose.uiToolingPreview)
     implementation(libs.androidx.compose.uiUtil)
 
@@ -237,6 +278,9 @@ dependencies {
 
     // HTML parser
     implementation(libs.jsoup)
+
+    // Pinyin (汉字→拼音) for index-bar first-letter sorting
+    implementation("com.belerweb:pinyin4j:2.5.1")
 
     // Disk
     implementation(libs.diskLruCache)
@@ -298,11 +342,6 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
 
     // SY -->
-    // Firebase (EH)
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.analytics)
-    implementation(libs.firebase.crashlytics)
-
     // Better logging (EH)
     implementation(sylibs.xlog)
 
@@ -320,10 +359,23 @@ dependencies {
 
     // ZXing Android Embedded
     implementation(sylibs.zxing.android.embedded)
+
+    // secp256k1 signing for Aliyun Pan web API session signature
+    implementation(sylibs.bcprov)
+
+    // SY -->
+    // Built-in Clash (mihomo) proxy core
+    implementation(files("libs/libmihomo-android-v0.3.1.aar"))
+    // SY <--
 }
 
 androidComponents {
     onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abi = output.filters.find { it.filterType.name == "ABI" }?.identifier ?: "universal"
+            output.outputFileName.set("TachiyomiX-${android.defaultConfig.versionName}-$abi.apk")
+        }
+
         val resSource = variant.sources.res ?: return@onVariants
 
         val variantName = variant.name.replaceFirstChar { it.uppercase() }

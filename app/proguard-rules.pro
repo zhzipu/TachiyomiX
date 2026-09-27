@@ -13,6 +13,10 @@
 -keep,allowoptimization class okhttp3.** { public protected *; }
 -keep,allowoptimization class okio.** { public protected *; }
 -keep,allowoptimization class org.jsoup.** { public protected *; }
+# FTP 客户端（commons-net）。它的 LIST 解析器里可选引用 org.apache.oro 的正则实现，
+# 我们没有那个依赖，属于「有引用但不会被走到」，直接 dontwarn 掉即可。
+-dontwarn org.apache.oro.**
+-keep,allowoptimization class org.apache.commons.net.** { public protected *; }
 -keep,allowoptimization class rx.** { public protected *; }
 -keep,allowoptimization class app.cash.quickjs.** { public protected *; }
 -keep,allowoptimization class uy.kohesive.injekt.** { public protected *; }
@@ -142,6 +146,30 @@
 
 # Google OAuth
 -keep class com.google.api.client.** { *; }
+
+# === libmihomo-android (mihomo/Clash core JNI bridge) ===
+# These classes/methods are looked up at runtime by libmihomo-jni.so via
+# FindClass / GetMethodID; stripping them crashes the native process.
+-keep class io.github.oviron.libmihomo.Clash { *; }
+-keep class io.github.oviron.libmihomo.Clash$Companion { *; }
+-keep interface io.github.oviron.libmihomo.TunInterface { *; }
+-keep interface io.github.oviron.libmihomo.InvokeInterface { *; }
+-keepclasseswithmembernames class io.github.oviron.libmihomo.** {
+    native <methods>;
+}
+
+# === 图像增强（waifu2x / Real-CUGAN）JNI 桥接 ===
+# libwaifu2x-jni.so 通过 Java_eu_kanade_tachiyomi_util_waifu2x_Waifu2x_xxx /
+# Java_eu_kanade_tachiyomi_util_qnn_QualcommHtp_xxx 命名约定查找方法，
+# 类名或包名被混淆会导致 UnsatisfiedLinkError，因此必须保留。
+-keep class eu.kanade.tachiyomi.util.waifu2x.Waifu2x { *; }
+-keep class eu.kanade.tachiyomi.util.qnn.QualcommHtp { *; }
+-keepclasseswithmembernames class eu.kanade.tachiyomi.util.waifu2x.** {
+    native <methods>;
+}
+-keepclasseswithmembernames class eu.kanade.tachiyomi.util.qnn.** {
+    native <methods>;
+}
 
 # SY -->
 # SqlCipher

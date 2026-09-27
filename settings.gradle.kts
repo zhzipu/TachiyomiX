@@ -49,4 +49,8 @@ include(":source-local")
 // SY -->
 include(":source-network")
 // SY <--
-include(":model-packs")
+// 模型包为独立分发的插件，源码在各 TachiyomiX-ModelPack-* 仓库（见 README「外置模型包」）；
+// 未克隆到本地时跳过该模块，保证主工程可单独构建
+if (file("model-packs").exists()) {
+    include(":model-packs")
+}

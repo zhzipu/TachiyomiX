@@ -167,20 +167,7 @@
 - 装一个显示一个，卸载即消失；**新增模型不需要更新宿主 APK**。
 - 设置路径：`设置 → 高级 → 模型包`。
 
-模型包的完整源码（每个模型一个独立仓库，可直接构建出对应 APK）：
-
-| 模型 | 仓库 |
-| --- | --- |
-| waifu2x 基础 | [TachiyomiX-ModelPack-waifu2x](https://github.com/zhzipu/TachiyomiX-ModelPack-waifu2x) |
-| waifu2x Upconv7 | [TachiyomiX-ModelPack-waifu2x-upconv7](https://github.com/zhzipu/TachiyomiX-ModelPack-waifu2x-upconv7) |
-| Real-CUGAN | [TachiyomiX-ModelPack-realcugan](https://github.com/zhzipu/TachiyomiX-ModelPack-realcugan) |
-| Real-CUGAN Pro | [TachiyomiX-ModelPack-realcugan-pro](https://github.com/zhzipu/TachiyomiX-ModelPack-realcugan-pro) |
-| Real-CUGAN Nose | [TachiyomiX-ModelPack-realcugan-nose](https://github.com/zhzipu/TachiyomiX-ModelPack-realcugan-nose) |
-| Real-ESRGAN | [TachiyomiX-ModelPack-realesrgan](https://github.com/zhzipu/TachiyomiX-ModelPack-realesrgan) |
-| SPAN NomosUni | [TachiyomiX-ModelPack-span-nomosuni](https://github.com/zhzipu/TachiyomiX-ModelPack-span-nomosuni) |
-| sudo UltraCompact | [TachiyomiX-ModelPack-sudo-ultracompact](https://github.com/zhzipu/TachiyomiX-ModelPack-sudo-ultracompact) |
-| ACNet | [TachiyomiX-ModelPack-acnet](https://github.com/zhzipu/TachiyomiX-ModelPack-acnet) |
-| Anime4K | [TachiyomiX-ModelPack-anime4k](https://github.com/zhzipu/TachiyomiX-ModelPack-anime4k) |
+模型包的完整源码以独立仓库分发，见「[相关项目](#相关项目)」。
 
 ## 6. 立体空间场景（Spatial depth）
 
@@ -239,7 +226,7 @@ ncnn SDK 路径按以下优先级取：
 
 默认按 ABI 拆包（armeabi-v7a / arm64-v8a / x86 / x86_64 + 通用包），产物名为 `TachiyomiX-<version>-<abi>.apk`。
 
-模型包源码不在本仓库内：每个模型都是独立工程（见「[外置模型包](#5-外置模型包)」的仓库列表），在各自仓库目录下执行 `./gradlew assembleRelease` 即可产出该模型的 APK。
+模型包源码不在本仓库内：每个模型都是独立工程（见「[相关项目](#相关项目)」的仓库列表），在各自仓库目录下执行 `./gradlew assembleRelease` 即可产出该模型的 APK。
 
 ---
 
@@ -252,6 +239,23 @@ ncnn SDK 路径按以下优先级取：
 - 首次使用立体场景需要下载模型并等待首次编译。
 
 ---
+
+## 相关项目
+
+模型包插件（图像增强模型）以独立仓库分发，每个仓库对应一个模型，均为可直接构建出自包含 APK 的完整工程：
+
+| 模型 | 仓库 |
+| --- | --- |
+| waifu2x 基础 | [TachiyomiX-ModelPack-waifu2x](https://github.com/zhzipu/TachiyomiX-ModelPack-waifu2x) |
+| waifu2x Upconv7 | [TachiyomiX-ModelPack-waifu2x-upconv7](https://github.com/zhzipu/TachiyomiX-ModelPack-waifu2x-upconv7) |
+| Real-CUGAN | [TachiyomiX-ModelPack-realcugan](https://github.com/zhzipu/TachiyomiX-ModelPack-realcugan) |
+| Real-CUGAN Pro | [TachiyomiX-ModelPack-realcugan-pro](https://github.com/zhzipu/TachiyomiX-ModelPack-realcugan-pro) |
+| Real-CUGAN Nose | [TachiyomiX-ModelPack-realcugan-nose](https://github.com/zhzipu/TachiyomiX-ModelPack-realcugan-nose) |
+| Real-ESRGAN | [TachiyomiX-ModelPack-realesrgan](https://github.com/zhzipu/TachiyomiX-ModelPack-realesrgan) |
+| SPAN NomosUni | [TachiyomiX-ModelPack-span-nomosuni](https://github.com/zhzipu/TachiyomiX-ModelPack-span-nomosuni) |
+| sudo UltraCompact | [TachiyomiX-ModelPack-sudo-ultracompact](https://github.com/zhzipu/TachiyomiX-ModelPack-sudo-ultracompact) |
+| ACNet | [TachiyomiX-ModelPack-acnet](https://github.com/zhzipu/TachiyomiX-ModelPack-acnet) |
+| Anime4K | [TachiyomiX-ModelPack-anime4k](https://github.com/zhzipu/TachiyomiX-ModelPack-anime4k) |
 
 ## 致谢与许可
 

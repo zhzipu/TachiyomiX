@@ -9,6 +9,7 @@
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 交流群：498819175
+
 一个基于 **TachiyomiSY**（→ Mihon → Tachiyomi）二次开发的 Android 漫画阅读器。
 
 除了上游自带的在线阅读、下载、书架、追踪、备份等能力外，TachiyomiX 主要围绕四件事做了扩展：

@@ -18,6 +18,7 @@ import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.data.updater.GITHUB_REPO
+import eu.kanade.tachiyomi.data.updater.awaitWithRetry
 import eu.kanade.tachiyomi.ui.more.NewUpdateScreen
 import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import eu.kanade.tachiyomi.util.CrashLogUtil
@@ -107,7 +108,8 @@ object AboutScreen : Screen() {
                         onPreferenceClick = {
                             scope.launch {
                                 val result = try {
-                                    Injekt.get<GetApplicationRelease>().await(
+                                    // 走带退避重试的版本：刚启动时内置代理/网络可能还没就绪（见 awaitWithRetry 注释）
+                                    Injekt.get<GetApplicationRelease>().awaitWithRetry(
                                         GetApplicationRelease.Arguments(
                                             isPreviewBuildType,
                                             BuildConfig.COMMIT_COUNT.toInt(),

@@ -18,7 +18,6 @@ import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.data.updater.GITHUB_REPO
-import eu.kanade.tachiyomi.data.updater.awaitWithRetry
 import eu.kanade.tachiyomi.ui.more.NewUpdateScreen
 import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import eu.kanade.tachiyomi.util.CrashLogUtil
@@ -30,6 +29,7 @@ import eu.kanade.tachiyomi.util.system.toast
 import exh.syDebugVersion
 import kotlinx.coroutines.launch
 import tachiyomi.domain.release.interactor.GetApplicationRelease
+import tachiyomi.domain.release.interactor.awaitWithRetry
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
 import tachiyomi.presentation.core.components.ScrollbarLazyColumn

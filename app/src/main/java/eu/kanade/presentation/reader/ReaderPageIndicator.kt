@@ -1,24 +1,40 @@
 package eu.kanade.presentation.reader
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -26,6 +42,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
 import eu.kanade.tachiyomi.util.waifu2x.ImageEnhancer
 import eu.kanade.tachiyomi.util.waifu2x.Waifu2x
@@ -35,6 +52,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @Composable
 fun ReaderPageIndicator(
@@ -63,6 +81,7 @@ fun ReaderSystemTimeIndicator(
             value = currentTimeString()
         }
     }
+    val battery = rememberBatteryState()
 
     val textStyle = overlayTextStyle()
     val textMeasurer = rememberTextMeasurer()
@@ -70,16 +89,170 @@ fun ReaderSystemTimeIndicator(
         textMeasurer.measure("0000", textStyle).size.width.toDp()
     }
 
-    ReaderOverlayText(
-        text = time,
+    // 电量图标 + 百分比放在原来时间的位置（最右），时间随之外移；
+    // 末尾仍留出「0000」的宽度，避免压到系统状态栏那一列。
+    Row(
         modifier = modifier.padding(end = fourCharWidth),
-    )
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(INDICATOR_GAP),
+    ) {
+        ReaderOverlayText(text = time)
+        ReaderBatteryIndicator(state = battery)
+    }
+}
+
+/** 剩余电量与是否正在充电；[BatteryState.level] 为 -1 表示还没读到。 */
+private data class BatteryState(
+    val level: Int,
+    val charging: Boolean,
+) {
+    companion object {
+        val Unknown = BatteryState(level = -1, charging = false)
+
+        fun fromIntent(intent: Intent?): BatteryState? {
+            intent ?: return null
+            val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+            if (level < 0 || scale <= 0) return null
+            val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+            return BatteryState(
+                level = (level * 100f / scale).roundToInt().coerceIn(0, 100),
+                charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == BatteryManager.BATTERY_STATUS_FULL,
+            )
+        }
+    }
+}
+
+/**
+ * 读电量。
+ *
+ * [Intent.ACTION_BATTERY_CHANGED] 是 sticky 系统广播：注册那一刻就会把当前值回调回来，
+ * 之后电量变化、插拔充电器也会继续收到，不需要轮询。
+ */
+@Composable
+private fun rememberBatteryState(): BatteryState {
+    val context = LocalContext.current
+    var state by remember { mutableStateOf(BatteryState.Unknown) }
+
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context?, intent: Intent?) {
+                BatteryState.fromIntent(intent)?.let { state = it }
+            }
+        }
+        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        val sticky = ContextCompat.registerReceiver(
+            context,
+            receiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        BatteryState.fromIntent(sticky)?.let { state = it }
+        onDispose { context.unregisterReceiver(receiver) }
+    }
+
+    return state
+}
+
+/** 电池图标 + 剩余电量百分比。 */
+@Composable
+private fun ReaderBatteryIndicator(state: BatteryState) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(BATTERY_ICON_GAP),
+    ) {
+        BatteryIcon(level = state.level, charging = state.charging)
+        if (state.level >= 0) {
+            ReaderOverlayText(text = "${state.level}%")
+        }
+    }
+}
+
+/**
+ * 手画电池图标：外壳 + 正极 + 按电量比例的填充。
+ *
+ * 外壳先描一道粗深色、再压一道细亮色，和 [ReaderOverlayText] 的「亮字深边」保持同一观感，
+ * 保证压在漫画画面上也看得清。充电时填充换色，低于 [LOW_BATTERY_THRESHOLD] 时转警示色。
+ */
+@Composable
+private fun BatteryIcon(level: Int, charging: Boolean) {
+    val fillColor = when {
+        charging -> BATTERY_CHARGING_COLOR
+        level in 0..LOW_BATTERY_THRESHOLD -> BATTERY_LOW_COLOR
+        else -> BATTERY_FILL_COLOR
+    }
+
+    Canvas(modifier = Modifier.size(BATTERY_ICON_WIDTH, BATTERY_ICON_HEIGHT)) {
+        val nubWidth = size.width * NUB_WIDTH_RATIO
+        val bodyWidth = size.width - nubWidth
+        val corner = size.height * 0.25f
+        val nubHeight = size.height * 0.4f
+        val outerStroke = 2.5.dp.toPx()
+        val innerStroke = 1.2.dp.toPx()
+
+        fun drawShell(color: Color, strokeWidth: Float) {
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(strokeWidth / 2, strokeWidth / 2),
+                size = Size(
+                    (bodyWidth - strokeWidth).coerceAtLeast(0f),
+                    (size.height - strokeWidth).coerceAtLeast(0f),
+                ),
+                cornerRadius = CornerRadius(corner, corner),
+                style = Stroke(width = strokeWidth),
+            )
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(bodyWidth, (size.height - nubHeight) / 2),
+                size = Size(nubWidth, nubHeight),
+                cornerRadius = CornerRadius(nubWidth / 2, nubWidth / 2),
+            )
+        }
+
+        drawShell(OVERLAY_STROKE_COLOR, outerStroke)
+        drawShell(BATTERY_OUTLINE_COLOR, innerStroke)
+
+        if (level > 0) {
+            val inset = innerStroke + 1.5.dp.toPx()
+            val innerWidth = (bodyWidth - inset * 2).coerceAtLeast(0f)
+            val innerHeight = (size.height - inset * 2).coerceAtLeast(0f)
+            val fillWidth = innerWidth * (level.coerceIn(0, 100) / 100f)
+            if (fillWidth > 0f && innerHeight > 0f) {
+                drawRoundRect(
+                    color = fillColor,
+                    topLeft = Offset(inset, inset),
+                    size = Size(fillWidth, innerHeight),
+                    cornerRadius = CornerRadius(corner / 2, corner / 2),
+                )
+            }
+        }
+    }
 }
 
 private fun currentTimeString(): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
 
 private const val MILLIS_PER_MINUTE = 60_000L
 private const val PROGRESS_POLL_INTERVAL_MS = 200L
+
+/** 低于这个电量，电池填充转警示色。 */
+private const val LOW_BATTERY_THRESHOLD = 15
+private const val NUB_WIDTH_RATIO = 0.12f
+
+private val BATTERY_ICON_WIDTH = 22.dp
+private val BATTERY_ICON_HEIGHT = 12.dp
+
+/** 时间与电量之间的距离。 */
+private val INDICATOR_GAP = 8.dp
+
+/** 电池图标与百分比文字之间的距离。 */
+private val BATTERY_ICON_GAP = 3.dp
+
+private val OVERLAY_STROKE_COLOR = Color(45, 45, 45)
+private val BATTERY_OUTLINE_COLOR = Color(235, 235, 235)
+private val BATTERY_FILL_COLOR = Color(235, 235, 235)
+private val BATTERY_CHARGING_COLOR = Color(0xFF8BE28B)
+private val BATTERY_LOW_COLOR = Color(0xFFFF8A65)
 
 /**
  * 左下角的图像增强处理状态：仅在原生处理进行中显示，空闲时自动隐藏。
@@ -174,7 +347,7 @@ private fun ReaderOverlayText(
 ) {
     val style = overlayTextStyle()
     val strokeStyle = style.copy(
-        color = Color(45, 45, 45),
+        color = OVERLAY_STROKE_COLOR,
         drawStyle = Stroke(width = 4f),
     )
 

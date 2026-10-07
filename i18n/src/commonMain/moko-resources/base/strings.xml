@@ -491,7 +491,7 @@
     <string name="reader_show_processing_status">Show processing status in bottom-left corner</string>
     <string name="reader_enhancing_page">Enhancing page %1$d · %2$d%%</string>
     <string name="reader_enhancing_page_queued">Enhancing page %1$d · %2$d%% · %3$d queued</string>
-    <string name="pref_show_system_time">Show system time</string>
+    <string name="pref_show_system_time">Show system time and battery</string>
     <string name="pref_vertical_navigator">Use vertical chapter navigator in</string>
     <string name="pref_vertical_navigator_height">Vertical navigator height</string>
     <string name="pref_webtoon_vertical_navigator_on_left">Place vertical navigator on the left side</string>

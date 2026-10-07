@@ -134,7 +134,7 @@
     <string name="reader_spatial_scene_stage_waiting_enhancement">等待影像增強完成…</string>
     <string name="reader_spatial_scene_stage_inferring">正在估算深度並建構場景…</string>
     <string name="reader_spatial_scene_exit">退出</string>
-    <string name="pref_show_system_time">顯示系統時間</string>
+    <string name="pref_show_system_time">顯示系統時間與電量</string>
     <string name="reader_feature_not_available">該功能尚未接入，後續版本支援</string>
     <string name="pref_model_packs">模型包</string>
     <string name="pref_model_packs_summary">管理 AI 圖像增強模型包</string>

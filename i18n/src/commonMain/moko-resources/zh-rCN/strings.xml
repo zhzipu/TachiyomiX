@@ -193,7 +193,7 @@
     <string name="reader_enhancing_page_queued">增强中 第 %1$d 页 · %2$d%% · 待处理 %3$d 页</string>
     <string name="pref_vertical_navigator">在以下阅读模式中使用垂直章节导航栏</string>
     <string name="pref_vertical_navigator_height">垂直导航栏高度</string>
-    <string name="pref_show_system_time">显示系统时间</string>
+    <string name="pref_show_system_time">显示系统时间与电量</string>
     <string name="pref_crop_borders">裁剪边缘</string>
     <string name="pref_custom_brightness">自定义亮度</string>
     <string name="pref_custom_color_filter">色彩滤镜</string>

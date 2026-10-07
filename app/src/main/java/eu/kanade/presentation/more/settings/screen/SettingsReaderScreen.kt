@@ -668,11 +668,6 @@ object SettingsReaderScreen : SearchableSettings {
                         .mapIndexed { index, it -> index to stringResource(it) }
                         .toMap(),
                 ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = readerPreferences.invertDoublePages,
-                    title = stringResource(SYMR.strings.invert_double_pages),
-                    enabled = pageLayout != PagerConfig.PageLayout.SINGLE_PAGE,
-                ),
                 Preference.PreferenceItem.ListPreference(
                     preference = readerPreferences.centerMarginType,
                     title = stringResource(SYMR.strings.center_margin),

@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderItem
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.setting.DoublePageOrder
 import eu.kanade.tachiyomi.ui.reader.viewer.calculateChapterGap
 import eu.kanade.tachiyomi.util.system.createReaderThemeContext
 import eu.kanade.tachiyomi.widget.ViewPagerAdapter
@@ -150,6 +151,8 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
         val item = joinedItems[position].first
         val item2 = joinedItems[position].second
         return when (item) {
+            // 换位的空窗/动画由 PagerViewer 的覆盖层负责，不再往 holder 里塞快照
+            // （ViewPager 可能建了 holder 又立刻销毁，快照按创建顺序发放会发错人）
             is ReaderPage -> PagerPageHolder(readerThemedContext, viewer, item, item2 as? ReaderPage)
             is ChapterTransition -> PagerTransitionHolder(readerThemedContext, viewer, item)
             // SY --> else -> throw NotImplementedError("Holder for ${item.javaClass} not implemented") SY <--
@@ -315,6 +318,16 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
 
                 otherItems.getOrNull(pagedItems.indexOf(items))?.let {
                     subJoinedItems.add(Pair(it, null))
+                }
+            }
+
+            // Step 5.5: 双页左右顺序。
+            // 顺序在「阅读顺序」上就已经确定：每个跨页里把 pair 的两页对调即可。
+            // 这里直接改数据结构，不等到翻到该页再换，因此后台所有跨页的顺序都是最终顺序。
+            // R2L 的反序放在这之后做，保证反序不会把这里的交换再翻回去。
+            if (viewer.doublePageOrder == DoublePageOrder.SWAPPED) {
+                subJoinedItems.replaceAll { (first, second) ->
+                    if (second != null) second to first else first to second
                 }
             }
 

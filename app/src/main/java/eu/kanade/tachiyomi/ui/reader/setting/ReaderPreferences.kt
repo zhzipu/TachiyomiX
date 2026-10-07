@@ -296,8 +296,6 @@ class ReaderPreferences(
 
     val pageLayout: Preference<Int> = preferenceStore.getInt("page_layout", PagerConfig.PageLayout.AUTOMATIC)
 
-    val invertDoublePages: Preference<Boolean> = preferenceStore.getBoolean("invert_double_pages", false)
-
     val centerMarginType: Preference<Int> = preferenceStore.getInt("center_margin_type", PagerConfig.CenterMarginType.NONE)
 
     val archiveReaderMode: Preference<Int> = preferenceStore.getInt("archive_reader_mode", ArchiveReaderMode.LOAD_FROM_FILE)

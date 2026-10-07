@@ -1,11 +1,19 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
+import android.graphics.Bitmap
 import android.graphics.PointF
+import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.PixelCopy
 import android.view.View
 import android.view.ViewGroup.LayoutParams
+import android.view.animation.DecelerateInterpolator
+import android.widget.FrameLayout
+import android.widget.ImageView
 import androidx.core.view.children
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -18,6 +26,7 @@ import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderItem
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.setting.DoublePageOrder
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
@@ -96,6 +105,10 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 activity.hideMenu()
             }
             onPageChange(position)
+            // 换位覆盖层只在「被换的那一跨页」上等新图；用户已经翻走就别再挡着了
+            if (awaitingSwapOverlay && !isAwaitingSwapSpreadAt(position)) {
+                removeSwapOverlay()
+            }
         }
 
         override fun onPageScrollStateChanged(state: Int) {
@@ -172,6 +185,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
 
     override fun destroy() {
         super.destroy()
+        removeSwapOverlay()
         scope.cancel()
     }
 
@@ -529,25 +543,227 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
     }
 
     /**
-     * 原位重合并当前双页并刷新页码（请求 1+黑屏修复）：
-     * 用 holder 的「插底层」路径重合并，不清空视图、不重建 adapter，避免 2 秒黑屏。
+     * 本漫画的双页左右顺序（运行时镜像，真实值存在 `Manga.viewerFlags` 里）。
      */
-    fun invertCurrentSpread() {
-        val spread = currentSpread() ?: return
-        if (spread.second == null) return // 单页显示无需处理
-        getPageHolder(spread.first)?.refreshInverted()
-        // 双页跨页：刷新页码显示（换位后数字也跟随）
-        activity.onPageSelected(spread.first, true)
+    var doublePageOrder: DoublePageOrder
+        get() = config.doublePageOrder
+        set(value) {
+            config.doublePageOrder = value
+        }
+
+    /**
+     * 双页换位的覆盖层：整张「交换前画面」+ 它的左右两半，挂在 viewer 容器最上层。
+     *
+     * 换位是改跨页内部的左右顺序，而顺序只在 `joinedItems` 上 → 当前 holder 的 item 变了
+     * → ViewPager 把旧 holder 销毁、另建一个（新图要重新解码 + 合成，几百毫秒）。
+     * 这段时间屏幕上什么都没有（长黑屏），所以换位前先把旧画面抓下来原样铺在最上层，
+     * 等新图就绪再让左右两半对滑到对方位置，最后撤掉。
+     *
+     * 快照用 [PixelCopy] 抓，**不是** `View.draw(软件 Canvas)`：SSIV 的瓦片可能是硬件位图，
+     * 画进软件 Canvas 会画不出来（抓成透明），这正是上一版「黑屏 + 看不到对滑动画」的原因之一。
+     * PixelCopy 抓的是真实上屏像素，拿到的又是普通位图，切两半放进 ImageView 做动画没问题。
+     *
+     * 覆盖层挂在 viewer 上而不是 holder 里：holder 由 ViewPager 按需创建/销毁，
+     * 挂在它身上的东西随时会被一起丢掉（另一个原因）。
+     */
+    private var swapOverlay: FrameLayout? = null
+    private var swapOverlayLeft: ImageView? = null
+    private var swapOverlayRight: ImageView? = null
+    private var swapOverlayWidth = 0
+    private val swapOverlayBitmaps = mutableListOf<Bitmap>()
+
+    /** 正在等「被换的那一跨页」的新图上屏：等到了才撤覆盖层、播对滑动画。 */
+    private var awaitingSwapOverlay = false
+    private var awaitingSwapPage: ReaderPage? = null
+
+    /** [position] 处的跨页里是否包含正在等新图的那一页。 */
+    private fun isAwaitingSwapSpreadAt(position: Int): Boolean {
+        val page = awaitingSwapPage ?: return false
+        val item = adapter.joinedItems.getOrNull(position) ?: return false
+        return item.first === page || item.second === page
     }
 
     /**
-     * 双页换位动画（请求 2）：长按反转双页顺序时，用两张源页做"左页向右、右页向左"的对滑
-     * （下一次 [PagerPageHolder.mergePages] 就地触发）。[oldPageOnRight] 是换位前第 1 页是否显示在右侧。
+     * 交换当前双页跨页的左右顺序（长按触发）。
+     *
+     * 顺序是**直接改在后台数据结构上**的（[PagerViewerAdapter.setJoinedItems] 里对每个跨页对调 pair），
+     * 不是翻到该页再临时交换，因此所有页的顺序都会一起变。
+     *
+     * 实现上重建一次 adapter 并停在同一页，页码指示器随后从新的 pair 里读，天然跟着交换。
      */
-    fun animateDoublePageSwap(oldPageOnRight: Boolean) {
+    fun swapCurrentSpread() {
         val spread = currentSpread() ?: return
-        if (spread.second == null) return // 单页显示无需换位动画
-        getPageHolder(spread.first)?.requestSwapAnimation(oldPageOnRight)
+        if (spread.second == null) return // 单页显示无需交换
+
+        val holder = getPageHolder(spread.first)
+        if (holder == null || holder.width <= 0 || holder.height <= 0) {
+            applyDoublePageSwap(spread, null)
+            return
+        }
+        // 先把「交换前画面」抓下来：adapter 重建后旧 holder 立刻被销毁，之后就没得抓了。
+        // PixelCopy 没有 View 重载（SDK 只有 SurfaceView/Surface/Window），所以按 holder 的
+        // 窗口坐标矩形去抓 Window。
+        val snapshot = Bitmap.createBitmap(holder.width, holder.height, Bitmap.Config.ARGB_8888)
+        val location = IntArray(2)
+        holder.getLocationInWindow(location)
+        val srcRect = Rect(location[0], location[1], location[0] + holder.width, location[1] + holder.height)
+        val requested = runCatching {
+            PixelCopy.request(
+                activity.window,
+                srcRect,
+                snapshot,
+                { result ->
+                    if (result == PixelCopy.SUCCESS) {
+                        applyDoublePageSwap(spread, snapshot)
+                    } else {
+                        snapshot.recycle()
+                        applyDoublePageSwap(spread, null)
+                    }
+                },
+                Handler(Looper.getMainLooper()),
+            )
+        }.isSuccess
+        if (!requested) {
+            snapshot.recycle()
+            applyDoublePageSwap(spread, null)
+        }
+    }
+
+    private fun applyDoublePageSwap(spread: Pair<ReaderPage, ReaderPage?>, snapshot: Bitmap?) {
+        doublePageOrder = doublePageOrder.flipped()
+
+        val chapters = activity.viewModel.state.value.viewerChapters
+        if (chapters == null) {
+            snapshot?.recycle()
+            return
+        }
+        // 保留当前停留位置：交换只改跨页内部顺序，不影响「停留在哪一页」
+        pager.removeOnPageChangeListener(pagerListener)
+        adapter.setChapters(chapters, config.alwaysShowChapterTransition)
+        pager.addOnPageChangeListener(pagerListener)
+
+        val position = adapter.joinedItems.indexOfFirst { it.first == spread.first || it.second == spread.first }
+        if (position != -1) {
+            pager.setCurrentItem(position, false)
+        }
+        // adapter 重建后 ViewPager 的监听不会自己回调，手动同步一次当前页与页码
+        onPageChange(pager.currentItem)
+
+        if (snapshot != null) showSwapOverlay(snapshot, spread.first)
+    }
+
+    /** 铺上覆盖层：先原样显示「交换前画面」，遮住新图合成前的空窗。 */
+    private fun showSwapOverlay(snapshot: Bitmap, swappedPage: ReaderPage) {
+        removeSwapOverlay()
+        val container = activity.binding.viewerContainer
+        val w = snapshot.width
+        val h = snapshot.height
+        val half = w / 2
+        if (half < 1) {
+            snapshot.recycle()
+            return
+        }
+
+        val leftBitmap = Bitmap.createBitmap(snapshot, 0, 0, half, h)
+        val rightBitmap = Bitmap.createBitmap(snapshot, half, 0, w - half, h)
+        swapOverlayBitmaps.add(snapshot)
+        swapOverlayBitmaps.add(leftBitmap)
+        swapOverlayBitmaps.add(rightBitmap)
+
+        // 垫一层不透明底：两半滑动过程中露出来的应该是底色而不是下层（还没换好的）新图
+        val cover = View(activity).apply { setBackgroundColor(config.pageCanvasColor) }
+        val left = ImageView(activity).apply {
+            setImageBitmap(leftBitmap)
+            scaleType = ImageView.ScaleType.FIT_XY
+        }
+        val right = ImageView(activity).apply {
+            setImageBitmap(rightBitmap)
+            scaleType = ImageView.ScaleType.FIT_XY
+            x = half.toFloat()
+        }
+        val overlay = FrameLayout(activity).apply {
+            addView(cover, LayoutParams(w, h))
+            addView(left, LayoutParams(half, h))
+            addView(right, LayoutParams(w - half, h))
+        }
+
+        container.addView(overlay, LayoutParams(w, h))
+        // 容器可能带 cutout 内边距，覆盖层要对齐 pager 而不是容器原点
+        val pagerLoc = IntArray(2)
+        val containerLoc = IntArray(2)
+        pager.getLocationOnScreen(pagerLoc)
+        container.getLocationOnScreen(containerLoc)
+        overlay.x = (pagerLoc[0] - containerLoc[0]).toFloat()
+        overlay.y = (pagerLoc[1] - containerLoc[1]).toFloat()
+
+        swapOverlay = overlay
+        swapOverlayLeft = left
+        swapOverlayRight = right
+        swapOverlayWidth = w
+        awaitingSwapOverlay = true
+        awaitingSwapPage = swappedPage
+
+        // 兜底：异常路径下新图可能永远不来，不能让覆盖层永久挡住画面
+        overlay.postDelayed(
+            { if (awaitingSwapOverlay) removeSwapOverlay() },
+            SWAP_OVERLAY_TIMEOUT_MS,
+        )
+    }
+
+    /**
+     * 被换的那一跨页的新图已经上屏（[PagerPageHolder.onImageLoaded] 调过来）：撤覆盖层并播对滑。
+     * 已经销毁的 holder（parent 为 null）不算——不能拿一个不在屏幕上的 holder 去播动画。
+     */
+    fun onSpreadImageLoaded(holder: PagerPageHolder) {
+        if (!awaitingSwapOverlay || holder.parent == null) return
+        val page = awaitingSwapPage
+        if (page != null && holder.item.first !== page && holder.item.second !== page) return
+        awaitingSwapOverlay = false
+        playSwapAnimation()
+    }
+
+    /** 当前跨页加载失败：覆盖层就地撤掉，别挡着错误提示。 */
+    fun onSpreadImageLoadFailed() {
+        if (awaitingSwapOverlay) removeSwapOverlay()
+    }
+
+    /** 用快照的左右两半对滑到新画面（在 UI 线程调用）。 */
+    private fun playSwapAnimation() {
+        val overlay = swapOverlay ?: return
+        val left = swapOverlayLeft ?: return
+        val right = swapOverlayRight ?: return
+        val w = if (overlay.width > 0) overlay.width else swapOverlayWidth
+        val half = if (left.width > 0) left.width else w / 2
+        if (w <= 0 || half < 1) {
+            removeSwapOverlay()
+            return
+        }
+        // 快照的左半原本在左，现在要滑到右边；右半反之。结束时新图已经在下面了。
+        left.animate()
+            .x((w - half).toFloat())
+            .setDuration(SWAP_ANIMATION_MS)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+        right.animate()
+            .x(0f)
+            .setDuration(SWAP_ANIMATION_MS)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction { removeSwapOverlay() }
+            .start()
+    }
+
+    private fun removeSwapOverlay() {
+        awaitingSwapOverlay = false
+        awaitingSwapPage = null
+        swapOverlayLeft?.animate()?.cancel()
+        swapOverlayRight?.animate()?.cancel()
+        swapOverlay?.let { activity.binding.viewerContainer.removeView(it) }
+        swapOverlay = null
+        swapOverlayLeft = null
+        swapOverlayRight = null
+        swapOverlayWidth = 0
+        swapOverlayBitmaps.forEach { if (!it.isRecycled) it.recycle() }
+        swapOverlayBitmaps.clear()
     }
 
     fun updateShifting(page: ReaderPage? = null) {
@@ -561,3 +777,9 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
     fun getShiftedPage(): ReaderPage? = adapter.pageToShift
     // SY <--
 }
+
+/** 双页换位「两半对滑」的时长。 */
+private const val SWAP_ANIMATION_MS = 450L
+
+/** 换位覆盖层最长保留时间（兜底；正常路径由新图就绪时撤掉）。 */
+private const val SWAP_OVERLAY_TIMEOUT_MS = 4000L

@@ -1083,16 +1083,14 @@ class ReaderActivity : BaseActivity() {
         }
     }
 
-    // 长按双页切换按钮 = 反转双页左右顺序（1|2 <-> 2|1）
+    // 长按双页切换按钮 = 交换双页跨页的左右顺序（1|2 <-> 2|1）
+    // 顺序直接改在后台数据结构上（所有跨页一起变），并按漫画持久化，下次读这本漫画自动沿用。
     private fun invertDoublePages() {
         val viewer = viewModel.state.value.viewer as? PagerViewer ?: return
         if (viewer.currentSpread()?.second == null) return // 非双页显示不做处理
-        val oldInvert = viewer.config.invertDoublePages // 换位前状态：决定动画里哪页在右
-        // 同步切换运行时配置（读双页方向/编号都以它为准）
-        viewer.config.invertDoublePages = !oldInvert
-        // 原位重合并 + 刷新页码（插底层，不清空、不重建，避免黑屏），并播放换位对滑动画
-        viewer.invertCurrentSpread()
-        viewer.animateDoublePageSwap(oldInvert)
+        // 先落盘（按漫画），再让 viewer 按新顺序重建跨页并停在同一页
+        viewModel.toggleMangaDoublePageOrder()
+        viewer.swapCurrentSpread()
         invalidateOptionsMenu()
     }
 // EXH <--
@@ -1130,12 +1128,21 @@ class ReaderActivity : BaseActivity() {
             prevViewer.destroy()
             binding.viewerContainer.removeAllViews()
         }
+        // SY -->
+        // 新 viewer 的 config 注册时会向导航覆盖层发一次 setNavigation，而覆盖层只把「第一次」当首次
+        // （见 ReaderNavigationOverlayView.setNavigation）。重建 viewer 时它会把这次注册误判成
+        // 「用户切换了导航模式」而弹出点按区域提示。这里显式复位成「新 viewer 的首次注册」。
+        binding.navigationOverlay.resetForNewViewer()
+        // SY <--
+
         viewModel.onViewerLoaded(newViewer)
         updateViewerInset(readerPreferences.fullscreen.get(), readerPreferences.drawUnderCutout.get())
         binding.viewerContainer.addView(newViewer.getView())
 
         // SY -->
         if (newViewer is PagerViewer) {
+            // 双页左右顺序：按这本漫画保存的值初始化（首次读到新漫画或没设置过则是默认顺序）
+            newViewer.doublePageOrder = viewModel.getMangaDoublePageOrder()
             if (readerPreferences.pageLayout.get() == PagerConfig.PageLayout.AUTOMATIC) {
                 setDoublePageMode(newViewer)
             }
@@ -1159,6 +1166,9 @@ class ReaderActivity : BaseActivity() {
             showReadingModeToast(viewModel.getMangaReadingMode())
         }
 
+        // 重建 viewer 时，上一次的加载圈可能还没被 setChapters 收走（没有新的 viewerChapters 就不会收），
+        // 先摘掉旧的，避免屏幕上留下一个永不消失的中心加载圈。
+        loadingIndicator?.let { binding.readerContainer.removeView(it) }
         loadingIndicator = ReaderProgressIndicator(this)
         binding.readerContainer.addView(loadingIndicator)
 
@@ -1319,29 +1329,18 @@ class ReaderActivity : BaseActivity() {
         }
         // SY <--
         val currentPageText = if (hasExtraPage) {
-            val invertDoublePage = (viewModel.state.value.viewer as? PagerViewer)?.config?.invertDoublePages ?: false
-            if ((resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_LTR) xor
-                invertDoublePage
-            ) {
-                "${page.number}-${page.number + 1}"
-            } else {
-                "${page.number + 1}-${page.number}"
-            }
+            "${page.number}-${page.number + 1}"
         } else {
             "${page.number}"
         }
         // 阅读器内的页数指示器文本：双页跨页时「左页-总页数-右页」（如 1-18-2），
-        // 单页显示（含奇数页单独显示、跨页拆分）留空，走默认的「当前页 / 总页数」
-        val rightPage = (viewModel.state.value.viewer as? PagerViewer)?.currentSpread()?.second
-        val pageIndicatorText = if (hasExtraPage && rightPage != null && rightPage.number != page.number) {
+        // 单页显示（含奇数页单独显示、跨页拆分）留空，走默认的「当前页 / 总页数」。
+        // 左右从当前跨页的 pair 里直接取：pair 的顺序就是屏幕顺序（见 PagerViewerAdapter.setJoinedItems），
+        // 长按交换后 pair 已对调，这里自然跟着变，不再需要任何 invert 公式二次换算。
+        val spread = (viewModel.state.value.viewer as? PagerViewer)?.currentSpread()
+        val pageIndicatorText = if (hasExtraPage && spread?.second != null) {
             val totalPages = page.chapter.pages?.count() ?: 0
-            val invertDoublePage = (viewModel.state.value.viewer as? PagerViewer)?.config?.invertDoublePages ?: false
-            // 切换显示顺序（invertDoublePages 与 RTL 异或）时自动交换左右页数
-            val isLtr = (resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_LTR) xor
-                invertDoublePage
-            val left = if (isLtr) page.number else rightPage.number
-            val right = if (isLtr) rightPage.number else page.number
-            "$left-$totalPages-$right"
+            "${spread.first.number}-$totalPages-${spread.second!!.number}"
         } else {
             ""
         }
@@ -1727,13 +1726,7 @@ class ReaderActivity : BaseActivity() {
         val text = if (secondPage != null) {
             stringResource(
                 SYMR.strings.share_pages_info, manga.title, chapter.name,
-                if (resources.configuration.layoutDirection ==
-                    View.LAYOUT_DIRECTION_LTR
-                ) {
-                    "${page.number}-${page.number + 1}"
-                } else {
-                    "${page.number + 1}-${page.number}"
-                },
+                "${page.number}-${secondPage.number}",
             )
         } else {
             stringResource(MR.strings.share_page_info, manga.title, chapter.name, page.number)

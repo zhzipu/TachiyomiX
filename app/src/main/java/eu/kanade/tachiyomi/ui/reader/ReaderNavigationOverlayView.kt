@@ -43,6 +43,22 @@ class ReaderNavigationOverlayView(context: Context, attributeSet: AttributeSet) 
         viewPropertyAnimator?.start()
     }
 
+    /**
+     * 新的 viewer 即将接管（阅读模式/方向变化等场景会重建 viewer）。
+     *
+     * [setNavigation] 把「不是第一次」当成「用户切换了导航模式」而主动弹出提示，重建 viewer 时
+     * 新 config 的首次注册会被误判成后者。这里复位成「首次」状态，之后是否显示只由
+     * `showOnStart`（设置里的「启动时显示导航提示」）决定；同一个 viewer 内真正切换导航模式时
+     * 的预览行为不受影响。
+     */
+    fun resetForNewViewer() {
+        viewPropertyAnimator?.cancel()
+        viewPropertyAnimator = null
+        navigation = null
+        isVisible = false
+        invalidate()
+    }
+
     private val regionPaint = Paint()
 
     private val textPaint = Paint().apply {

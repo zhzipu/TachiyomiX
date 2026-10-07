@@ -12,6 +12,7 @@ import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.chapter.interactor.SetReadStatus
 import eu.kanade.domain.chapter.model.toDbChapter
 import eu.kanade.domain.manga.interactor.SetMangaViewerFlags
+import eu.kanade.domain.manga.model.doublePageOrder
 import eu.kanade.domain.manga.model.readerOrientation
 import eu.kanade.domain.manga.model.readingMode
 import eu.kanade.domain.source.interactor.GetIncognitoState
@@ -39,12 +40,12 @@ import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.setting.DoublePageOrder
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
-import eu.kanade.tachiyomi.ui.reader.viewer.pager.R2LPagerViewer
 import eu.kanade.tachiyomi.util.chapter.filterDownloaded
 import eu.kanade.tachiyomi.util.chapter.removeDuplicates
 import eu.kanade.tachiyomi.util.editCover
@@ -453,10 +454,26 @@ class ReaderViewModel @JvmOverloads constructor(
         page: Int? = null,
         // SY <--
     ): ViewerChapters {
-        // 图像增强：切换到新章节时清空上一章残留的增强队列，
-        // 让本批次从左下角进度、队列内容都从新章节重新开始
-        ImageEnhancer.reset(page ?: 0)
+        // 图像增强：必须在 `loader.loadChapter` **之前**把增强目标页定好并重置队列。
+        // 原因：loader 内部（尤其开启「激进加载」时）会在 getPages() 里把本章所有页丢进
+        // 加载队列，页面一加载完就各自触发 `ReaderEnhancement.request`。若此时增强器的
+        // targetPageIndex 仍是默认的 0，第 0 页的请求会命中 `isInitialTargetRequest`
+        // 被当成「初始目标页」提为最高优先级并开始放大；随后才执行的 reset 往往已经拦不住
+        // 已经开始的原生 upscale，于是表现为「先增强第 1 页，再增强当前页」。
+        // 因此这里用与 loader 相同的口径先算出本次真正会打开的页，reset 之后再交给 loader。
+        val initialTargetPage = when {
+            page != null -> page
+            !chapter.chapter.read || readerPreferences.preserveReadingPosition.get() ->
+                chapter.chapter.last_page_read
+            else -> chapter.requestedPage
+        }
+        ImageEnhancer.reset(initialTargetPage)
+
         loader.loadChapter(chapter /* SY --> */, page/* SY <-- */)
+
+        // loader 载入完成后按最终确定的 requestedPage 再校正一次目标页（不清队列，
+        // 避免把本次已合法入队的预加载页丢掉）。
+        ImageEnhancer.updateFocus(chapter.requestedPage)
 
         val chapterPos = chapterList.indexOf(chapter)
         val newChapters = ViewerChapters(
@@ -974,6 +991,36 @@ class ReaderViewModel @JvmOverloads constructor(
     }
 
     // SY -->
+    /**
+     * 本会话内的双页左右顺序覆盖值（换位后为新值，没换过是 null）。
+     *
+     * 换位**绝不能**写回 `state.manga`：`ReaderActivity` 监听 `state.manga`，一变就调 `updateViewer()`
+     * 把整个 viewer 重建 —— 新 viewer 还没拿到章节，并且会留下一个永不消失的中心加载圈、
+     * 还会让导航覆盖层弹出点按区域提示。会话内的新值因此单独放这里，落盘照旧走数据库。
+     */
+    private var sessionDoublePageOrder: DoublePageOrder? = null
+
+    /**
+     * 这本漫画的双页左右顺序。按漫画保存在 `viewerFlags` 里，下次再读同一本漫画会自动沿用。
+     */
+    fun getMangaDoublePageOrder(): DoublePageOrder =
+        sessionDoublePageOrder ?: manga?.doublePageOrder ?: DoublePageOrder.NORMAL
+
+    /**
+     * 翻转并保存这本漫画的双页左右顺序，返回翻转后的结果。
+     * 写入是异步的，但返回的是新值，调用方可立即按新顺序重排。
+     */
+    fun toggleMangaDoublePageOrder(): DoublePageOrder {
+        val next = getMangaDoublePageOrder().flipped()
+        // 先记住会话内的新值，保证 getMangaDoublePageOrder() 立刻拿到新顺序（且不触发 state 变更）
+        sessionDoublePageOrder = next
+        val manga = manga ?: return next
+        viewModelScope.launchIO {
+            setMangaViewerFlags.awaitSetDoublePageOrder(manga.id, next)
+        }
+        return next
+    }
+
     fun toggleCropBorders(): Boolean {
         val readingMode = getMangaReadingMode()
         val isPagerType = ReadingMode.isPagerType(readingMode)
@@ -1136,7 +1183,7 @@ class ReaderViewModel @JvmOverloads constructor(
     fun saveImages() {
         val (firstPage, secondPage) = (state.value.dialog as? Dialog.PageActions ?: return)
         val viewer = state.value.viewer as? PagerViewer ?: return
-        val isLTR = (viewer !is R2LPagerViewer) xor (viewer.config.invertDoublePages)
+        // 存盘时按对话框给出的两页顺序合并（firstPage 在左），与画面上的 pair 顺序一致
         val bg = viewer.config.pageCanvasColor
 
         if (firstPage.status != Page.State.Ready) return
@@ -1154,7 +1201,7 @@ class ReaderViewModel @JvmOverloads constructor(
                 val uri = saveImages(
                     page1 = firstPage,
                     page2 = secondPage,
-                    isLTR = isLTR,
+                    isLTR = true,
                     bg = bg,
                     location = Location.Pictures.create(DiskUtil.buildValidFilename(manga.title)),
                     manga = manga,
@@ -1244,7 +1291,6 @@ class ReaderViewModel @JvmOverloads constructor(
     fun shareImages(copyToClipboard: Boolean) {
         val (firstPage, secondPage) = (state.value.dialog as? Dialog.PageActions ?: return)
         val viewer = state.value.viewer as? PagerViewer ?: return
-        val isLTR = (viewer !is R2LPagerViewer) xor (viewer.config.invertDoublePages)
         val bg = viewer.config.pageCanvasColor
 
         if (firstPage.status != Page.State.Ready) return
@@ -1260,7 +1306,8 @@ class ReaderViewModel @JvmOverloads constructor(
                 val uri = saveImages(
                     page1 = firstPage,
                     page2 = secondPage,
-                    isLTR = isLTR,
+                    // 按对话框给出的两页顺序合并（firstPage 在左），与画面上的 pair 顺序一致
+                    isLTR = true,
                     bg = bg,
                     location = Location.Cache,
                     manga = manga,

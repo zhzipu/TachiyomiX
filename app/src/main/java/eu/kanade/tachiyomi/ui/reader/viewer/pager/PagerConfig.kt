@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
 import android.graphics.Color
 import androidx.annotation.ColorInt
+import eu.kanade.tachiyomi.ui.reader.setting.DoublePageOrder
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerConfig
@@ -83,9 +84,13 @@ class PagerConfig(
             }
         }
 
-    var invertDoublePages = false
-
     var autoDoublePages = readerPreferences.pageLayout.get() == PageLayout.AUTOMATIC
+
+    /**
+     * 双页跨页的左右顺序。**按漫画保存**（`Manga.viewerFlags`），此处只是本会话的运行时镜像，
+     * 由 [PagerViewer] 在打开漫画 / 长按互换时写入。阅读模式与屏幕方向的偏好变化不会影响它。
+     */
+    var doublePageOrder = DoublePageOrder.NORMAL
 
     @ColorInt
     var pageCanvasColor = Color.WHITE
@@ -201,9 +206,6 @@ class PagerConfig(
 
         readerPreferences.centerMarginType
             .register({ centerMarginType = it }, { imagePropertyChangedListener?.invoke() })
-
-        readerPreferences.invertDoublePages
-            .register({ invertDoublePages = it && dualPageSplit == false }, { imagePropertyChangedListener?.invoke() })
         // SY <--
 
         // 图像增强：增强相关偏好变化时先取消按旧配置排队/进行中的处理，

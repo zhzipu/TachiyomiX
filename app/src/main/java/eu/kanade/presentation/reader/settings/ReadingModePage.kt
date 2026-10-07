@@ -197,11 +197,6 @@ private fun ColumnScope.PagerViewerSettings(screenModel: ReaderSettingsScreenMod
         pref = screenModel.preferences.pageTransitionsPager,
     )
 
-    CheckboxItem(
-        label = stringResource(SYMR.strings.invert_double_pages),
-        pref = screenModel.preferences.invertDoublePages,
-    )
-
     val centerMarginType by screenModel.preferences.centerMarginType.collectAsState()
     SettingsChipRow(SYMR.strings.pref_center_margin) {
         ReaderPreferences.CenterMarginTypes.mapIndexed { index, it ->

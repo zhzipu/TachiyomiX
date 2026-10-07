@@ -5,10 +5,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.view.LayoutInflater
-import android.view.View
-import android.view.animation.DecelerateInterpolator
-import android.widget.FrameLayout
-import android.widget.ImageView
 import androidx.core.view.isVisible
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.databinding.ReaderErrorBinding
@@ -291,6 +287,11 @@ class PagerPageHolder(
                     pageBackground = background
                 }
                 removeErrorLayout()
+                // 画面已经交出去了：不管之前有没有建过加载圈，这里一律收起。
+                // 双页换位会重建 holder（pair 变了 → getItemPosition 返回 POSITION_NONE），
+                // 新 holder 的 setImage 走的是「页面早已 Ready」这条捷径，不会有 100 进度回调兜底，
+                // 于是加载圈会一直挂在屏幕上。这里兜住。
+                progressIndicator?.hide()
             }
 
             // 图像增强：还没有放大结果时触发高优先级处理，处理完成后刷新画面
@@ -392,16 +393,15 @@ class PagerPageHolder(
             return imageSource
         }
 
-        val isLTR = (viewer !is R2LPagerViewer) xor viewer.config.invertDoublePages
+        // 屏幕左右 = pair 顺序：page(= pair.first) 在左，extraPage(= pair.second) 在右。
+        // 双页交换已在 PagerViewerAdapter.setJoinedItems 里改好 pair，所以这里恒为 true，
+        // 不再需要阅读方向/invert 之类的换算（那套公式与画面容易不一致）。
         val centerMargin = calculateCenterMargin(imageBitmap.height, imageBitmap2.height)
-
-        // 请求了换位动画则在此就地触发（对滑左右两页），用的是两张源页位图
-        maybePlaySwap(imageBitmap, imageBitmap2)
 
         imageSource.close()
         imageSource2.close()
 
-        return ImageUtil.mergeBitmaps(imageBitmap, imageBitmap2, isLTR, centerMargin, viewer.config.pageCanvasColor) {
+        return ImageUtil.mergeBitmaps(imageBitmap, imageBitmap2, true, centerMargin, viewer.config.pageCanvasColor) {
             updateProgress(it)
         }
     }
@@ -496,101 +496,19 @@ class PagerPageHolder(
      * Called when the page has an error.
      */
     private fun setError(error: Throwable?) {
+        // 换位覆盖层别挡着错误提示，也别等一张永远等不到的新图
+        viewer.onSpreadImageLoadFailed()
         progressIndicator?.hide()
         showErrorLayout(error)
     }
 
+    // ---- 双页左右换位 --------------------------------------------------------
+
     override fun onImageLoaded() {
         super.onImageLoaded()
         progressIndicator?.hide()
-    }
-
-    /**
-     * 原位重合并当前双页（反转顺序用）：把新合并图插到最底层加载，原图留在上层，
-     * 完成后才替换——不会清空视图，因此不会出现黑屏。不清任何后台队列。
-     */
-    fun refreshInverted() {
-        if (page.status != Page.State.Ready) return
-        scope.launch {
-            setNextImageInsertAtBottom()
-            setImage()
-        }
-    }
-
-    /**
-     * 请求换位动画：下一次 [mergePages] 生成双页时，用两张源页位图播放"左页向右、右页向左"的对滑。
-     * [pageOnRight] 表示换位前第 1 页（page）当前显示在右侧（即旧顺序已反转）。
-     */
-    @Volatile
-    private var swapPending = false
-    @Volatile
-    private var swapPageOnRight = false
-
-    fun requestSwapAnimation(pageOnRight: Boolean) {
-        swapPending = true
-        swapPageOnRight = pageOnRight
-    }
-
-    /** 用两张源页位图播放对滑换位动画（在 UI 线程调用）。 */
-    private fun playSwapAnimation(pageBmp: Bitmap, extraBmp: Bitmap) {
-        val w = width
-        val h = height
-        val half = w / 2
-        val leftBmp = if (swapPageOnRight) extraBmp else pageBmp
-        val rightBmp = if (swapPageOnRight) pageBmp else extraBmp
-        if (w <= 0 || h <= 0 || half < 1) {
-            pageBmp.recycle()
-            extraBmp.recycle()
-            return
-        }
-        val left = ImageView(context).apply {
-            setImageBitmap(leftBmp)
-            scaleType = ImageView.ScaleType.FIT_XY
-            layoutParams = FrameLayout.LayoutParams(half, h)
-        }
-        val right = ImageView(context).apply {
-            setImageBitmap(rightBmp)
-            scaleType = ImageView.ScaleType.FIT_XY
-            layoutParams = FrameLayout.LayoutParams(w - half, h)
-            x = half.toFloat()
-        }
-        // 在最下面垫一层不透明覆盖，挡住下层漫画层（反转重合并可能新建 SSIV，alpha 方案不可靠）
-        val cover = View(context).apply {
-            layoutParams = FrameLayout.LayoutParams(w, h)
-            setBackgroundColor(viewer.config.pageCanvasColor)
-        }
-        addView(cover)
-        addView(left)
-        addView(right)
-        // 左半 -> 右侧；右半 -> 左侧（对滑）
-        left.animate()
-            .x((w - half).toFloat())
-            .setDuration(450L)
-            .setInterpolator(DecelerateInterpolator())
-            .start()
-        right.animate()
-            .x(0f)
-            .setDuration(450L)
-            .setInterpolator(DecelerateInterpolator())
-            .withEndAction {
-                removeView(cover)
-                removeView(left)
-                removeView(right)
-                pageBmp.recycle()
-                extraBmp.recycle()
-            }
-            .start()
-    }
-
-    /** 生成双页结束后，若请求了换位动画则就地触发（IO 线程调用，post 到 UI 线程）。 */
-    private fun maybePlaySwap(imageBitmap: Bitmap, imageBitmap2: Bitmap) {
-        if (!swapPending) return
-        swapPending = false
-        // 拷贝两份，避免与 mergeBitmaps 对原图的回收冲突
-        val pageCopy = imageBitmap.copy(Bitmap.Config.ARGB_8888, false)
-        val extraCopy = imageBitmap2.copy(Bitmap.Config.ARGB_8888, false)
-        if (pageCopy == null || extraCopy == null) return
-        post { playSwapAnimation(pageCopy, extraCopy) }
+        // 新图真正上屏了：换位覆盖层可以撤掉、并播两页对滑了（提前撤会被还没换上的画面盖住）
+        viewer.onSpreadImageLoaded(this)
     }
 
     /**

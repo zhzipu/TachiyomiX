@@ -3,6 +3,7 @@ package eu.kanade.domain.manga.model
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.ui.reader.setting.DoublePageOrder
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.util.storage.CbzCrypto
@@ -20,6 +21,10 @@ val Manga.readingMode: Long
 
 val Manga.readerOrientation: Long
     get() = viewerFlags and ReaderOrientation.MASK.toLong()
+
+/** 双页跨页的左右顺序（按漫画保存，见 [eu.kanade.tachiyomi.ui.reader.setting.DoublePageOrder]）。 */
+val Manga.doublePageOrder: DoublePageOrder
+    get() = DoublePageOrder.fromMangaViewerFlags(viewerFlags)
 
 val Manga.downloadedFilter: TriState
     get() {

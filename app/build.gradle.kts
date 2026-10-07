@@ -54,8 +54,8 @@ android {
     defaultConfig {
         applicationId = "com.tachiyomi.x"
 
-        versionCode = getLatestCommitCount().toIntOrNull() ?: 1
-        versionName = "1.0.0"
+        versionCode = 109
+        versionName = "1.0.7"
 
         buildConfigField("String", "UPSTREAM_VERSION", """"0.20.1"""")
 

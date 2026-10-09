@@ -185,9 +185,13 @@ data class BrowseSourceScreen(
         val visibleManga = mangaList.itemSnapshotList.items.mapNotNull { it?.value?.first }
         // SY <--
         val navigateUp: () -> Unit = {
-            when {
-                !state.isUserQuery && state.toolbarQuery != null -> screenModel.setToolbarQuery(null)
-                else -> navigator.pop()
+            // 搜索 / 点了 tag / 改过筛选之后先撤销浏览状态；撤不了再走原来的逻辑。
+            if (!screenModel.undoBrowsingStateBeforeLeaving()) {
+                if (!state.isUserQuery && state.toolbarQuery != null) {
+                    screenModel.setToolbarQuery(null)
+                } else {
+                    navigator.pop()
+                }
             }
         }
 
@@ -209,9 +213,14 @@ data class BrowseSourceScreen(
         val snackbarHostState = remember { SnackbarHostState() }
 
         // SY -->
-        // Back exits multi-select mode first, before popping the screen.
-        BackHandler(enabled = state.selectionMode) {
-            screenModel.toggleSelectionMode()
+        // 返回键：多选 → 退出多选；搜索 / 点了 tag / 改过筛选 → 先撤销浏览状态回到进入之前的列表
+        // （不能一步掉回图源列表）；都没有才 pop。
+        BackHandler(enabled = state.selectionMode || screenModel.canUndoBrowsingState()) {
+            if (state.selectionMode) {
+                screenModel.toggleSelectionMode()
+            } else if (!screenModel.undoBrowsingStateBeforeLeaving()) {
+                navigator.pop()
+            }
         }
         // SY <--
 

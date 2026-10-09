@@ -146,6 +146,40 @@ open class BrowseSourceScreenModel(
 
     private val searchHistoryScope = "source_$sourceId"
 
+    // SY -->
+    /** 进入「搜索 / 点了 tag 的结果」之前的那份列表；返回时退它，而不是直接退出图源。 */
+    private var listingBeforeQuery: Listing? = null
+
+    /** 用户在筛选对话框里改过筛选条件（返回时先撤销它）。 */
+    private var filtersChangedByUser = false
+
+    /** 当前有没有「搜索 / 标签 / 筛选」这类可撤销的浏览状态。 */
+    fun canUndoBrowsingState(): Boolean =
+        (state.value.listing is Listing.Search && listingBeforeQuery != null) || filtersChangedByUser
+
+    /**
+     * 返回键 / 返回箭头的第一层：先撤销「搜索 / 点了 tag / 改过筛选」这些浏览状态，
+     * 回到进入之前的那份列表（顺带清搜索框、页码、筛选与分页缓存）。
+     *
+     * @return true 表示已撤销（调用方**不要** pop）；false 表示没有可撤销的状态，按原逻辑处理。
+     */
+    fun undoBrowsingStateBeforeLeaving(): Boolean {
+        if (state.value.listing is Listing.Search) {
+            val target = listingBeforeQuery ?: return false
+            // 搜索 / 标签结果 → 退回进入之前的那份列表，筛选也一并撤销
+            resetFilters()
+            setListing(target)
+            return true
+        }
+        if (filtersChangedByUser) {
+            // 只是改过筛选（列表没换）→ 撤销筛选，列表刷新回未筛选状态
+            resetFilters()
+            return true
+        }
+        return false
+    }
+    // SY <--
+
     init {
         mutableState.update {
             var query: String? = null
@@ -162,6 +196,17 @@ open class BrowseSourceScreenModel(
                 toolbarQuery = query,
             )
         }
+
+        // SY -->
+        // 记住最近一次「非搜索」的列表：搜索 / 点 tag 之后按返回要退回它，不能一步掉回图源列表。
+        screenModelScope.launchIO {
+            state.collect { current ->
+                if (current.listing !is Listing.Search) {
+                    listingBeforeQuery = current.listing
+                }
+            }
+        }
+        // SY <--
 
         if (!getIncognitoState.await(source.id)) {
             sourcePreferences.lastUsedSource.set(source.id)
@@ -409,6 +454,7 @@ open class BrowseSourceScreenModel(
     // SY <--
 
     fun resetFilters() {
+        filtersChangedByUser = false
         mutableState.update { it.copy(filters = source.getFilterList()) }
     }
 
@@ -429,11 +475,9 @@ open class BrowseSourceScreenModel(
     }
 
     fun setFilters(filters: FilterList) {
-        mutableState.update {
-            it.copy(
-                filters = filters,
-            )
-        }
+        // 返回时先撤销它，而不是直接退出图源
+        filtersChangedByUser = true
+        mutableState.update { it.copy(filters = filters) }
     }
 
     fun search(query: String? = null, filters: FilterList? = null) {

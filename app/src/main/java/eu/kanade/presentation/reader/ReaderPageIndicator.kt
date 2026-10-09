@@ -223,14 +223,15 @@ private fun BatteryIcon(level: Int, charging: Boolean) {
         val outerStroke = 2.5.dp.toPx()
         val innerStroke = 1.2.dp.toPx()
 
-        // 最外围一层纯黑描边：只画环，不填内部。
-        drawRoundRect(
-            color = BATTERY_OUTER_STROKE_COLOR,
-            topLeft = Offset(outer / 2, outer / 2),
-            size = Size((size.width - outer).coerceAtLeast(0f), (size.height - outer).coerceAtLeast(0f)),
-            cornerRadius = CornerRadius(corner + outer / 2, corner + outer / 2),
-            style = Stroke(width = outer),
-        )
+        /** 正极：填充圆角矩形；[inflate] 用来在它外圈画一道描边。 */
+        fun drawNub(color: Color, inflate: Float = 0f) {
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(outer + bodyWidth - inflate, outer + (height - nubHeight) / 2 - inflate),
+                size = Size(nubWidth + inflate * 2, nubHeight + inflate * 2),
+                cornerRadius = CornerRadius(nubWidth / 2 + inflate, nubWidth / 2 + inflate),
+            )
+        }
 
         fun drawShell(color: Color, strokeWidth: Float) {
             drawRoundRect(
@@ -243,13 +244,19 @@ private fun BatteryIcon(level: Int, charging: Boolean) {
                 cornerRadius = CornerRadius(corner, corner),
                 style = Stroke(width = strokeWidth),
             )
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(outer + bodyWidth, outer + (height - nubHeight) / 2),
-                size = Size(nubWidth, nubHeight),
-                cornerRadius = CornerRadius(nubWidth / 2, nubWidth / 2),
-            )
+            drawNub(color)
         }
+
+        // 最外围一层纯黑描边：**沿电池本体轮廓**走一圈（只画环，不填内部），
+        // 正极（nub）单独再描一圈 —— 不能用一个矩形环把两者一起圈进去，那样就不是电池形状了。
+        drawRoundRect(
+            color = BATTERY_OUTER_STROKE_COLOR,
+            topLeft = Offset(outer / 2, outer / 2),
+            size = Size(bodyWidth + outer, height + outer),
+            cornerRadius = CornerRadius(corner + outer / 2, corner + outer / 2),
+            style = Stroke(width = outer),
+        )
+        drawNub(BATTERY_OUTER_STROKE_COLOR, inflate = outer)
 
         drawShell(OVERLAY_STROKE_COLOR, outerStroke)
         drawShell(BATTERY_OUTLINE_COLOR, innerStroke)

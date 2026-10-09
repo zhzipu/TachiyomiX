@@ -308,8 +308,8 @@ private val BATTERY_BAR_BACKER_PADDING = 0.75.dp
 /** 电池图标最外围那层纯黑描边（画在本体之外，不占电池本体尺寸）。 */
 private val BATTERY_OUTER_STROKE_COLOR = Color.Black
 
-/** 最外围黑描边的宽度。 */
-private val BATTERY_OUTER_STROKE_WIDTH = 1.5.dp
+/** 最外围黑描边的宽度（正极那圈也用这个值）。 */
+private val BATTERY_OUTER_STROKE_WIDTH = 0.75.dp
 
 /** 电池图标与百分比文字之间的距离。 */
 private val BATTERY_ICON_GAP = 3.dp

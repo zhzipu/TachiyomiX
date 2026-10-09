@@ -77,6 +77,7 @@ import eu.kanade.presentation.reader.DisplayRefreshHost
 import eu.kanade.presentation.reader.OrientationSelectDialog
 import eu.kanade.presentation.reader.ReaderContentOverlay
 import eu.kanade.presentation.reader.ReaderPageActionsDialog
+import eu.kanade.presentation.reader.ReaderBatteryStatusIndicator
 import eu.kanade.presentation.reader.ReaderPageIndicator
 import eu.kanade.presentation.reader.ReaderProcessingStatusIndicator
 import eu.kanade.presentation.reader.ReaderSystemTimeIndicator
@@ -416,7 +417,13 @@ class ReaderActivity : BaseActivity() {
             }
 
             if (!state.menuVisible && showSystemTime) {
+                // 时间在顶端左侧、电量在顶端右侧，分列两端
                 ReaderSystemTimeIndicator(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding(),
+                )
+                ReaderBatteryStatusIndicator(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .statusBarsPadding(),

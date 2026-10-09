@@ -40,6 +40,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.PreviewLightDark
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -70,6 +71,7 @@ fun ReaderPageIndicator(
     )
 }
 
+/** 阅读器**顶端左侧**的系统时间。 */
 @Composable
 fun ReaderSystemTimeIndicator(
     modifier: Modifier = Modifier,
@@ -81,23 +83,35 @@ fun ReaderSystemTimeIndicator(
             value = currentTimeString()
         }
     }
+
+    // 起始留出「0000」的宽度，避免压到系统状态栏左侧那一列图标。
+    ReaderOverlayText(
+        text = time,
+        modifier = modifier.padding(start = statusBarIconColumnWidth()),
+    )
+}
+
+/** 阅读器**顶端右侧**的电量图标 + 剩余电量百分比。 */
+@Composable
+fun ReaderBatteryStatusIndicator(
+    modifier: Modifier = Modifier,
+) {
     val battery = rememberBatteryState()
 
+    // 末尾留出「0000」的宽度，避免压到系统状态栏右侧那一列图标。
+    ReaderBatteryIndicator(
+        state = battery,
+        modifier = modifier.padding(end = statusBarIconColumnWidth()),
+    )
+}
+
+/** 系统状态栏图标列的宽度（按「0000」估）：顶端指示器靠它躲开状态栏那一列。 */
+@Composable
+private fun statusBarIconColumnWidth(): Dp {
     val textStyle = overlayTextStyle()
     val textMeasurer = rememberTextMeasurer()
-    val fourCharWidth = with(LocalDensity.current) {
+    return with(LocalDensity.current) {
         textMeasurer.measure("0000", textStyle).size.width.toDp()
-    }
-
-    // 电量图标 + 百分比放在原来时间的位置（最右），时间随之外移；
-    // 末尾仍留出「0000」的宽度，避免压到系统状态栏那一列。
-    Row(
-        modifier = modifier.padding(end = fourCharWidth),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(INDICATOR_GAP),
-    ) {
-        ReaderOverlayText(text = time)
-        ReaderBatteryIndicator(state = battery)
     }
 }
 
@@ -157,8 +171,12 @@ private fun rememberBatteryState(): BatteryState {
 
 /** 电池图标 + 剩余电量百分比。 */
 @Composable
-private fun ReaderBatteryIndicator(state: BatteryState) {
+private fun ReaderBatteryIndicator(
+    state: BatteryState,
+    modifier: Modifier = Modifier,
+) {
     Row(
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(BATTERY_ICON_GAP),
     ) {
@@ -170,10 +188,14 @@ private fun ReaderBatteryIndicator(state: BatteryState) {
 }
 
 /**
- * 手画电池图标：外壳 + 正极 + 按电量比例的填充。
+ * 手画电池图标：纯黑底衬 + 外壳 + 正极 + 按电量比例的填充。
  *
- * 外壳先描一道粗深色、再压一道细亮色，和 [ReaderOverlayText] 的「亮字深边」保持同一观感，
- * 保证压在漫画画面上也看得清。充电时填充换色，低于 [LOW_BATTERY_THRESHOLD] 时转警示色。
+ * **底衬是必须的**：外壳、正极与电量条都是浅色（[BATTERY_OUTLINE_COLOR]），直接压在白色漫画页上会糊成一片、
+ * 只剩一道深色描边，电量根本读不出来；垫一层不透明的纯黑底衬后，页面是白是黑都看得清。
+ * 底衬内再留 [BATTERY_ICON_BASE_PADDING] 的边距，让电池本体不贴着黑块边缘。
+ *
+ * 电池本体沿用「先描一道粗深色、再压一道细亮色」的观感，和 [ReaderOverlayText] 的「亮字深边」一致；
+ * 充电时填充换色，低于 [LOW_BATTERY_THRESHOLD] 时转警示色。
  */
 @Composable
 private fun BatteryIcon(level: Int, charging: Boolean) {
@@ -183,48 +205,66 @@ private fun BatteryIcon(level: Int, charging: Boolean) {
         else -> BATTERY_FILL_COLOR
     }
 
-    Canvas(modifier = Modifier.size(BATTERY_ICON_WIDTH, BATTERY_ICON_HEIGHT)) {
-        val nubWidth = size.width * NUB_WIDTH_RATIO
-        val bodyWidth = size.width - nubWidth
-        val corner = size.height * 0.25f
-        val nubHeight = size.height * 0.4f
-        val outerStroke = 2.5.dp.toPx()
-        val innerStroke = 1.2.dp.toPx()
+    Canvas(
+        modifier = Modifier.size(
+            BATTERY_ICON_WIDTH + BATTERY_ICON_BASE_PADDING * 2,
+            BATTERY_ICON_HEIGHT + BATTERY_ICON_BASE_PADDING * 2,
+        ),
+    ) {
+        val baseInset = BATTERY_ICON_BASE_PADDING.toPx()
 
-        fun drawShell(color: Color, strokeWidth: Float) {
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(strokeWidth / 2, strokeWidth / 2),
-                size = Size(
-                    (bodyWidth - strokeWidth).coerceAtLeast(0f),
-                    (size.height - strokeWidth).coerceAtLeast(0f),
-                ),
-                cornerRadius = CornerRadius(corner, corner),
-                style = Stroke(width = strokeWidth),
-            )
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(bodyWidth, (size.height - nubHeight) / 2),
-                size = Size(nubWidth, nubHeight),
-                cornerRadius = CornerRadius(nubWidth / 2, nubWidth / 2),
-            )
-        }
+        // 不透明纯黑底衬，铺满整个 Canvas（含边距）。
+        drawRoundRect(
+            color = BATTERY_BASE_COLOR,
+            cornerRadius = CornerRadius(BATTERY_ICON_BASE_CORNER.toPx(), BATTERY_ICON_BASE_CORNER.toPx()),
+        )
 
-        drawShell(OVERLAY_STROKE_COLOR, outerStroke)
-        drawShell(BATTERY_OUTLINE_COLOR, innerStroke)
+        // 电池本体的可用区域 = 去掉底衬边距后的部分；下面各点都再加 baseInset 平移到该区域。
+        val width = size.width - baseInset * 2
+        val height = size.height - baseInset * 2
+        if (width > 0f && height > 0f) {
+            val nubWidth = width * NUB_WIDTH_RATIO
+            val bodyWidth = width - nubWidth
+            val corner = height * 0.25f
+            val nubHeight = height * 0.4f
+            val outerStroke = 2.5.dp.toPx()
+            val innerStroke = 1.2.dp.toPx()
 
-        if (level > 0) {
-            val inset = innerStroke + 1.5.dp.toPx()
-            val innerWidth = (bodyWidth - inset * 2).coerceAtLeast(0f)
-            val innerHeight = (size.height - inset * 2).coerceAtLeast(0f)
-            val fillWidth = innerWidth * (level.coerceIn(0, 100) / 100f)
-            if (fillWidth > 0f && innerHeight > 0f) {
+            fun drawShell(color: Color, strokeWidth: Float) {
                 drawRoundRect(
-                    color = fillColor,
-                    topLeft = Offset(inset, inset),
-                    size = Size(fillWidth, innerHeight),
-                    cornerRadius = CornerRadius(corner / 2, corner / 2),
+                    color = color,
+                    topLeft = Offset(baseInset + strokeWidth / 2, baseInset + strokeWidth / 2),
+                    size = Size(
+                        (bodyWidth - strokeWidth).coerceAtLeast(0f),
+                        (height - strokeWidth).coerceAtLeast(0f),
+                    ),
+                    cornerRadius = CornerRadius(corner, corner),
+                    style = Stroke(width = strokeWidth),
                 )
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(baseInset + bodyWidth, baseInset + (height - nubHeight) / 2),
+                    size = Size(nubWidth, nubHeight),
+                    cornerRadius = CornerRadius(nubWidth / 2, nubWidth / 2),
+                )
+            }
+
+            drawShell(OVERLAY_STROKE_COLOR, outerStroke)
+            drawShell(BATTERY_OUTLINE_COLOR, innerStroke)
+
+            if (level > 0) {
+                val inset = innerStroke + 1.5.dp.toPx()
+                val innerWidth = (bodyWidth - inset * 2).coerceAtLeast(0f)
+                val innerHeight = (height - inset * 2).coerceAtLeast(0f)
+                val fillWidth = innerWidth * (level.coerceIn(0, 100) / 100f)
+                if (fillWidth > 0f && innerHeight > 0f) {
+                    drawRoundRect(
+                        color = fillColor,
+                        topLeft = Offset(baseInset + inset, baseInset + inset),
+                        size = Size(fillWidth, innerHeight),
+                        cornerRadius = CornerRadius(corner / 2, corner / 2),
+                    )
+                }
             }
         }
     }
@@ -242,8 +282,14 @@ private const val NUB_WIDTH_RATIO = 0.12f
 private val BATTERY_ICON_WIDTH = 22.dp
 private val BATTERY_ICON_HEIGHT = 12.dp
 
-/** 时间与电量之间的距离。 */
-private val INDICATOR_GAP = 8.dp
+/** 电池图标的不透明纯黑底衬：白底页面上浅色外壳与电量条靠它才看得清。 */
+private val BATTERY_BASE_COLOR = Color.Black
+
+/** 底衬相对电池本体的留白（底衬外扩、电池本体不贴黑块边缘）。 */
+private val BATTERY_ICON_BASE_PADDING = 1.dp
+
+/** 底衬圆角。 */
+private val BATTERY_ICON_BASE_CORNER = 2.dp
 
 /** 电池图标与百分比文字之间的距离。 */
 private val BATTERY_ICON_GAP = 3.dp

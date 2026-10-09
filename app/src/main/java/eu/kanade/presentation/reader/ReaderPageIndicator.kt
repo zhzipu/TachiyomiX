@@ -188,11 +188,11 @@ private fun ReaderBatteryIndicator(
 }
 
 /**
- * 手画电池图标：纯黑底衬 + 外壳 + 正极 + 按电量比例的填充。
+ * 手画电池图标：外壳 + 正极 + 按电量比例的填充，填充底下垫一层纯黑底衬。
  *
- * **底衬是必须的**：外壳、正极与电量条都是浅色（[BATTERY_OUTLINE_COLOR]），直接压在白色漫画页上会糊成一片、
- * 只剩一道深色描边，电量根本读不出来；垫一层不透明的纯黑底衬后，页面是白是黑都看得清。
- * 底衬内再留 [BATTERY_ICON_BASE_PADDING] 的边距，让电池本体不贴着黑块边缘。
+ * 底衬**只垫在电量条下面**（比电量条四周各大出 [BATTERY_BAR_BACKER_PADDING]）：外壳与电量条都是浅色
+ * （[BATTERY_OUTLINE_COLOR]），压在白色漫画页上会糊成一片、电量读不出来；垫黑之后页面是白是黑都看得清，
+ * 又不至于像铺满整块底板那样把黑面积撑大。
  *
  * 电池本体沿用「先描一道粗深色、再压一道细亮色」的观感，和 [ReaderOverlayText] 的「亮字深边」一致；
  * 充电时填充换色，低于 [LOW_BATTERY_THRESHOLD] 时转警示色。
@@ -205,66 +205,56 @@ private fun BatteryIcon(level: Int, charging: Boolean) {
         else -> BATTERY_FILL_COLOR
     }
 
-    Canvas(
-        modifier = Modifier.size(
-            BATTERY_ICON_WIDTH + BATTERY_ICON_BASE_PADDING * 2,
-            BATTERY_ICON_HEIGHT + BATTERY_ICON_BASE_PADDING * 2,
-        ),
-    ) {
-        val baseInset = BATTERY_ICON_BASE_PADDING.toPx()
+    Canvas(modifier = Modifier.size(BATTERY_ICON_WIDTH, BATTERY_ICON_HEIGHT)) {
+        val nubWidth = size.width * NUB_WIDTH_RATIO
+        val bodyWidth = size.width - nubWidth
+        val corner = size.height * 0.25f
+        val nubHeight = size.height * 0.4f
+        val outerStroke = 2.5.dp.toPx()
+        val innerStroke = 1.2.dp.toPx()
 
-        // 不透明纯黑底衬，铺满整个 Canvas（含边距）。
-        drawRoundRect(
-            color = BATTERY_BASE_COLOR,
-            cornerRadius = CornerRadius(BATTERY_ICON_BASE_CORNER.toPx(), BATTERY_ICON_BASE_CORNER.toPx()),
-        )
+        fun drawShell(color: Color, strokeWidth: Float) {
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(strokeWidth / 2, strokeWidth / 2),
+                size = Size(
+                    (bodyWidth - strokeWidth).coerceAtLeast(0f),
+                    (size.height - strokeWidth).coerceAtLeast(0f),
+                ),
+                cornerRadius = CornerRadius(corner, corner),
+                style = Stroke(width = strokeWidth),
+            )
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(bodyWidth, (size.height - nubHeight) / 2),
+                size = Size(nubWidth, nubHeight),
+                cornerRadius = CornerRadius(nubWidth / 2, nubWidth / 2),
+            )
+        }
 
-        // 电池本体的可用区域 = 去掉底衬边距后的部分；下面各点都再加 baseInset 平移到该区域。
-        val width = size.width - baseInset * 2
-        val height = size.height - baseInset * 2
-        if (width > 0f && height > 0f) {
-            val nubWidth = width * NUB_WIDTH_RATIO
-            val bodyWidth = width - nubWidth
-            val corner = height * 0.25f
-            val nubHeight = height * 0.4f
-            val outerStroke = 2.5.dp.toPx()
-            val innerStroke = 1.2.dp.toPx()
+        drawShell(OVERLAY_STROKE_COLOR, outerStroke)
+        drawShell(BATTERY_OUTLINE_COLOR, innerStroke)
 
-            fun drawShell(color: Color, strokeWidth: Float) {
+        if (level > 0) {
+            val inset = innerStroke + 1.5.dp.toPx()
+            val innerWidth = (bodyWidth - inset * 2).coerceAtLeast(0f)
+            val innerHeight = (size.height - inset * 2).coerceAtLeast(0f)
+            val fillWidth = innerWidth * (level.coerceIn(0, 100) / 100f)
+            if (fillWidth > 0f && innerHeight > 0f) {
+                val backer = BATTERY_BAR_BACKER_PADDING.toPx()
+                // 先垫黑（比电量条大一圈），再画电量条 —— 黑只出现在电量条这一小片范围内。
                 drawRoundRect(
-                    color = color,
-                    topLeft = Offset(baseInset + strokeWidth / 2, baseInset + strokeWidth / 2),
-                    size = Size(
-                        (bodyWidth - strokeWidth).coerceAtLeast(0f),
-                        (height - strokeWidth).coerceAtLeast(0f),
-                    ),
-                    cornerRadius = CornerRadius(corner, corner),
-                    style = Stroke(width = strokeWidth),
+                    color = BATTERY_BAR_BACKER_COLOR,
+                    topLeft = Offset((inset - backer).coerceAtLeast(0f), (inset - backer).coerceAtLeast(0f)),
+                    size = Size(fillWidth + backer * 2, innerHeight + backer * 2),
+                    cornerRadius = CornerRadius(corner / 2 + backer, corner / 2 + backer),
                 )
                 drawRoundRect(
-                    color = color,
-                    topLeft = Offset(baseInset + bodyWidth, baseInset + (height - nubHeight) / 2),
-                    size = Size(nubWidth, nubHeight),
-                    cornerRadius = CornerRadius(nubWidth / 2, nubWidth / 2),
+                    color = fillColor,
+                    topLeft = Offset(inset, inset),
+                    size = Size(fillWidth, innerHeight),
+                    cornerRadius = CornerRadius(corner / 2, corner / 2),
                 )
-            }
-
-            drawShell(OVERLAY_STROKE_COLOR, outerStroke)
-            drawShell(BATTERY_OUTLINE_COLOR, innerStroke)
-
-            if (level > 0) {
-                val inset = innerStroke + 1.5.dp.toPx()
-                val innerWidth = (bodyWidth - inset * 2).coerceAtLeast(0f)
-                val innerHeight = (height - inset * 2).coerceAtLeast(0f)
-                val fillWidth = innerWidth * (level.coerceIn(0, 100) / 100f)
-                if (fillWidth > 0f && innerHeight > 0f) {
-                    drawRoundRect(
-                        color = fillColor,
-                        topLeft = Offset(baseInset + inset, baseInset + inset),
-                        size = Size(fillWidth, innerHeight),
-                        cornerRadius = CornerRadius(corner / 2, corner / 2),
-                    )
-                }
             }
         }
     }
@@ -282,14 +272,11 @@ private const val NUB_WIDTH_RATIO = 0.12f
 private val BATTERY_ICON_WIDTH = 22.dp
 private val BATTERY_ICON_HEIGHT = 12.dp
 
-/** 电池图标的不透明纯黑底衬：白底页面上浅色外壳与电量条靠它才看得清。 */
-private val BATTERY_BASE_COLOR = Color.Black
+/** 电量条下面那层纯黑底衬：白底页面上浅色的外壳与电量条靠它才看得清。 */
+private val BATTERY_BAR_BACKER_COLOR = Color.Black
 
-/** 底衬相对电池本体的留白（底衬外扩、电池本体不贴黑块边缘）。 */
-private val BATTERY_ICON_BASE_PADDING = 1.dp
-
-/** 底衬圆角。 */
-private val BATTERY_ICON_BASE_CORNER = 2.dp
+/** 黑底衬比电量条四周各大出多少（让黑在电量条外露一圈，而不是铺满图标）。 */
+private val BATTERY_BAR_BACKER_PADDING = 0.75.dp
 
 /** 电池图标与百分比文字之间的距离。 */
 private val BATTERY_ICON_GAP = 3.dp

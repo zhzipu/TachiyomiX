@@ -5,6 +5,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -17,7 +18,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
@@ -57,14 +57,9 @@ fun StatusWrapper(
                 if (enabled) {
                     Modifier
                 } else {
-                    // 在 Initial 阶段消费掉所有指针事件，子项（开关 / 可点击行）便不再响应
-                    Modifier.pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
-                            }
-                        }
-                    }
+                    // 只吞「点按」，不阻断拖动：否则在灰掉的这几行上滑动时，外层设置列表滚不动。
+                    // detectTapGestures 的行为与普通可点击行一致 —— 轻点被吃掉，拖动仍交给列表滚动。
+                    Modifier.pointerInput(Unit) { detectTapGestures { } }
                 },
             ),
     ) {

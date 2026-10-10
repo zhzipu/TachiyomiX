@@ -94,7 +94,10 @@ class AppUpdateDownloadJob(private val context: Context, workerParams: WorkerPar
 
         try {
             // Download the new update.
-            val response = network.client.newCachelessCallWithProgress(GET(url), progressListener)
+            // 必须走 directClient：NetworkHelper 的注释写明「plugin marketplace / update checks / **APK downloads**
+            // 不能走代理」。内置 Clash 的出口节点会把 github.com 的 TLS 握手重置（与更新检查同因），
+            // 走代理时表现为「检查更新正常、下载安装包总是失败」。
+            val response = network.directClient.newCachelessCallWithProgress(GET(url), progressListener)
                 .await()
 
             // File where the apk will be saved.

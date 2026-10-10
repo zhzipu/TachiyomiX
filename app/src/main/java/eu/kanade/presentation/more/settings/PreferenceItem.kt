@@ -5,6 +5,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -15,6 +16,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.more.settings.widget.EditTextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.InfoWidget
@@ -41,18 +47,36 @@ fun StatusWrapper(
 ) {
     val enabled = item.enabled
     val highlighted = item.title == highlightKey
-    AnimatedVisibility(
-        visible = enabled,
-        enter = expandVertically() + fadeIn(),
-        exit = shrinkVertically() + fadeOut(),
-        content = {
-            CompositionLocalProvider(
-                LocalPreferenceHighlighted provides highlighted,
-                content = content,
-            )
-        },
-    )
+    // 禁用项不再整行隐藏，而是留在列表里**变暗 + 屏蔽交互**：
+    // 「存在、但当前不可用」应当看得见（例如代理总开关没开时的「作用域」开关）。
+    Box(
+        modifier = Modifier
+            .alpha(if (enabled) 1f else DISABLED_ITEM_ALPHA)
+            .semantics { if (!enabled) disabled() }
+            .then(
+                if (enabled) {
+                    Modifier
+                } else {
+                    // 在 Initial 阶段消费掉所有指针事件，子项（开关 / 可点击行）便不再响应
+                    Modifier.pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+                },
+            ),
+    ) {
+        CompositionLocalProvider(
+            LocalPreferenceHighlighted provides highlighted,
+            content = content,
+        )
+    }
 }
+
+/** 禁用项的透明度（0.38 是 Material 的 disabled 观感）。 */
+private const val DISABLED_ITEM_ALPHA = 0.38f
 
 @Composable
 internal fun PreferenceItem(

@@ -205,44 +205,67 @@ object SettingsProxyScreen : SearchableSettings {
     private fun getProxyScopeGroup(
         clashPreferences: ClashPreferences,
     ): Preference.PreferenceGroup {
+        // 作用域只在「内置代理可用」时才有意义：内置 Clash 或手动 HTTP 代理任一开启即可用。
+        // 用 collectAsState() 订阅，拨动开关后这里的可用状态会立即重组。
+        val clashEnabled by clashPreferences.enabled.collectAsState()
+        val httpProxyEnabled by clashPreferences.httpProxyEnabled.collectAsState()
+        val proxyOn = clashEnabled || httpProxyEnabled
+
+        val scopeTitle = stringResource(SYMR.strings.pref_proxy_scope)
+        // PreferenceGroup 没有 subtitle/description 形参，说明文字只能拼到分组标题后面。
+        val title = if (proxyOn) {
+            scopeTitle
+        } else {
+            scopeTitle + " · " + stringResource(SYMR.strings.pref_proxy_scope_disabled_hint)
+        }
+
         return Preference.PreferenceGroup(
-            title = stringResource(SYMR.strings.pref_proxy_scope),
+            title = title,
             preferenceItems = listOf(
                 Preference.PreferenceItem.SwitchPreference(
                     preference = clashPreferences.proxyScope(ProxyScope.ONLINE_READING),
                     title = stringResource(SYMR.strings.pref_proxy_scope_online_reading),
+                    enabled = proxyOn,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = clashPreferences.proxyScope(ProxyScope.MANGA_DOWNLOAD),
                     title = stringResource(SYMR.strings.pref_proxy_scope_manga_download),
+                    enabled = proxyOn,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = clashPreferences.proxyScope(ProxyScope.MANGA_UPLOAD),
                     title = stringResource(SYMR.strings.pref_proxy_scope_manga_upload),
+                    enabled = proxyOn,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = clashPreferences.proxyScope(ProxyScope.EXTENSION_REPO),
                     title = stringResource(SYMR.strings.pref_proxy_scope_extension_repo),
+                    enabled = proxyOn,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = clashPreferences.proxyScope(ProxyScope.EXTENSION_DOWNLOAD),
                     title = stringResource(SYMR.strings.pref_proxy_scope_extension_download),
+                    enabled = proxyOn,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = clashPreferences.proxyScope(ProxyScope.SYNC),
                     title = stringResource(SYMR.strings.pref_proxy_scope_sync),
+                    enabled = proxyOn,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = clashPreferences.proxyScope(ProxyScope.WEBDAV),
                     title = stringResource(SYMR.strings.pref_proxy_scope_webdav),
+                    enabled = proxyOn,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = clashPreferences.proxyScope(ProxyScope.VERSION_CHECK),
                     title = stringResource(SYMR.strings.pref_proxy_scope_version_check),
+                    enabled = proxyOn,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = clashPreferences.proxyScope(ProxyScope.UPDATE_DOWNLOAD),
                     title = stringResource(SYMR.strings.pref_proxy_scope_update_download),
+                    enabled = proxyOn,
                 ),
             ),
         )

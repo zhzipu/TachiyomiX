@@ -142,6 +142,112 @@ class PagerPageHolder(
         }
     }
 
+    // SY -->
+    /** 双页时加载圈该待的侧：true = 左半，false = 右半，null = 居中（单页或两页都齐）。 */
+    private var progressIndicatorSide: Boolean? = null
+
+    /** 双页里「还没出画面」的那一页所在侧；单页或两页都齐时为 null。 */
+    private fun missingHalfSide(): Boolean? {
+        val extra = extraPage ?: return null
+        val mainReady = page.status == Page.State.Ready && page.stream != null
+        val extraReady = extra.status == Page.State.Ready && extra.stream != null
+        return when {
+            mainReady && !extraReady -> false
+            extraReady && !mainReady -> true
+            else -> null
+        }
+    }
+
+    /** 把加载圈挪到缺的那一侧（画布宽度的 1/4 处）；两页都齐则回到正中。 */
+    private fun applyProgressIndicatorSide() {
+        val indicator = progressIndicator ?: return
+        indicator.translationX = when (progressIndicatorSide) {
+            true -> -width / 4f
+            false -> width / 4f
+            null -> 0f
+        }
+    }
+
+    /** 显示加载圈；双页只就绪一页时自动摆到缺的那一侧。 */
+    private fun showProgressIndicator() {
+        initProgressIndicator()
+        progressIndicatorSide = missingHalfSide()
+        progressIndicator?.show()
+        applyProgressIndicatorSide()
+    }
+
+    /**
+     * 双页凑齐（或单页）才收起加载圈；只就绪一页时把圈留在缺的那一侧，
+     * 让已经加载好的那一页继续显示在它自己那一侧。
+     */
+    private fun hideProgressIndicatorIfSpreadComplete() {
+        if (extraPage == null || missingHalfSide() == null) {
+            progressIndicatorSide = null
+            progressIndicator?.translationX = 0f
+            progressIndicator?.hide()
+        } else {
+            showProgressIndicator()
+        }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        applyProgressIndicatorSide()
+    }
+
+    /**
+     * 双页里只有一页就绪：把这一页按原尺寸画在**它自己那一侧**，另一侧用页面底色填满。
+     *
+     * 这样已加载好的那页立刻出现在该在的一侧（而不是被 FIT 到画面正中），另一侧由加载圈继续提示。
+     */
+    private fun mergePageWithBlank(imageSource: BufferedSource, onLeft: Boolean): BufferedSource {
+        val bitmap = decodeImage(imageSource) ?: return handleWideImage(imageSource)
+        // 本身就是跨页宽图：按整页显示
+        if (bitmap.width > bitmap.height) return handleWideImage(imageSource)
+
+        val background = viewer.config.pageCanvasColor
+        val blank = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        blank.eraseColor(background)
+        return if (onLeft) {
+            ImageUtil.mergeBitmaps(bitmap, blank, true, 0, background) { updateProgress(it) }
+        } else {
+            ImageUtil.mergeBitmaps(blank, bitmap, true, 0, background) { updateProgress(it) }
+        }
+    }
+
+    /**
+     * 双页里「配对页先就绪、本页还没」时的渲染：把它画在自己那一侧，另一侧留页面底色，
+     * 加载圈交给 [hideProgressIndicatorIfSpreadComplete] 摆到缺的那一侧。
+     */
+    private suspend fun renderSingleHalf(imageSource: BufferedSource, onLeft: Boolean) {
+        val merged = mergePageWithBlank(imageSource, onLeft)
+        val isAnimated = ImageUtil.isAnimatedAndSupported(merged)
+        val background = if (!isAnimated && viewer.config.automaticBackground) {
+            ImageUtil.chooseBackground(context, merged.peek())
+        } else {
+            null
+        }
+        withUIContext {
+            setImage(
+                merged,
+                isAnimated,
+                Config(
+                    zoomDuration = viewer.config.doubleTapAnimDuration,
+                    minimumScaleType = viewer.config.imageScaleType,
+                    cropBorders = viewer.config.imageCropBorders,
+                    zoomStartPosition = viewer.config.imageZoomType,
+                    landscapeZoom = viewer.config.landscapeZoom,
+                ),
+            )
+            if (!isAnimated) {
+                pageBackground = background
+            }
+            removeErrorLayout()
+            hideProgressIndicatorIfSpreadComplete()
+        }
+    }
+    // SY <--
+
     /**
      * Loads the page and processes changes to the page's status.
      *
@@ -180,8 +286,7 @@ class PagerPageHolder(
      * Called when the page is queued.
      */
     private fun setQueued() {
-        initProgressIndicator()
-        progressIndicator?.show()
+        showProgressIndicator()
         removeErrorLayout()
     }
 
@@ -189,8 +294,7 @@ class PagerPageHolder(
      * Called when the page is loading.
      */
     private fun setLoading() {
-        initProgressIndicator()
-        progressIndicator?.show()
+        showProgressIndicator()
         removeErrorLayout()
     }
 
@@ -198,8 +302,7 @@ class PagerPageHolder(
      * Called when the page is downloading.
      */
     private fun setDownloading() {
-        initProgressIndicator()
-        progressIndicator?.show()
+        showProgressIndicator()
         removeErrorLayout()
     }
 
@@ -238,6 +341,15 @@ class PagerPageHolder(
             visible = showingEnhancedImage,
             pages = if (extraPage != null && !viewer.config.dualPageSplit) 2 else 1,
         )
+        // 双页：配对页可能比本页先就绪，这时先把它画在它自己那一侧（右半），
+        // 本页就绪后再走正常合并，避免「一边已经加载好了却什么都不显示」。
+        if (enhancedFile == null && page.stream == null) {
+            val extraStreamFn = extraPage?.stream
+            if (extraStreamFn != null) {
+                renderSingleHalf(Buffer().readFrom(extraStreamFn().buffered(16)), onLeft = false)
+            }
+            return
+        }
         val streamFn: () -> InputStream = if (enhancedFile != null) {
             { enhancedFile.inputStream() }
         } else {
@@ -255,10 +367,14 @@ class PagerPageHolder(
                     } else {
                         null
                     }.use { source2 ->
-                        val itemSource = if (viewer.config.dualPageSplit) {
-                            process(item.first, Buffer().readFrom(source))
-                        } else {
-                            mergePages(Buffer().readFrom(source), source2?.let { Buffer().readFrom(it) })
+                        val itemSource = when {
+                            viewer.config.dualPageSplit -> process(item.first, Buffer().readFrom(source))
+                            // 单页：沿用原行为（含宽图居中留白）
+                            extraPage == null -> mergePages(Buffer().readFrom(source), null)
+                            // 两页都就绪：合并成一跨页
+                            source2 != null -> mergePages(Buffer().readFrom(source), Buffer().readFrom(source2))
+                            // 只就绪本页（pair.first）：画在左侧，右侧留页面底色 + 加载圈
+                            else -> mergePageWithBlank(Buffer().readFrom(source), onLeft = true)
                         }
                         // SY <--
                         val isAnimated = ImageUtil.isAnimatedAndSupported(itemSource)
@@ -287,11 +403,12 @@ class PagerPageHolder(
                     pageBackground = background
                 }
                 removeErrorLayout()
-                // 画面已经交出去了：不管之前有没有建过加载圈，这里一律收起。
+                // 画面已经交出去了：双页两页都齐（或单页）时收起加载圈；
+                // 只就绪一页时把圈留在缺的那一侧，别盖住已经出来的那一页。
                 // 双页换位会重建 holder（pair 变了 → getItemPosition 返回 POSITION_NONE），
                 // 新 holder 的 setImage 走的是「页面早已 Ready」这条捷径，不会有 100 进度回调兜底，
                 // 于是加载圈会一直挂在屏幕上。这里兜住。
-                progressIndicator?.hide()
+                hideProgressIndicatorIfSpreadComplete()
             }
 
             // 图像增强：还没有放大结果时触发高优先级处理，处理完成后刷新画面
@@ -441,7 +558,8 @@ class PagerPageHolder(
     private fun updateProgress(progress: Int) {
         scope.launch {
             if (progress == 100) {
-                progressIndicator?.hide()
+                // 双页两页都齐才收起；只就绪一页时留在缺的那一侧
+                hideProgressIndicatorIfSpreadComplete()
             } else {
                 progressIndicator?.setProgress(progress)
             }
@@ -506,7 +624,8 @@ class PagerPageHolder(
 
     override fun onImageLoaded() {
         super.onImageLoaded()
-        progressIndicator?.hide()
+        // 双页两页都齐才收起加载圈；只就绪一页时把它留在缺的那一侧
+        hideProgressIndicatorIfSpreadComplete()
         // 新图真正上屏了：换位覆盖层可以撤掉、并播两页对滑了（提前撤会被还没换上的画面盖住）
         viewer.onSpreadImageLoaded(this)
     }

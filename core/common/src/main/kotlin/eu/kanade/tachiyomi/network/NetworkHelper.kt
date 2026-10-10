@@ -103,6 +103,13 @@ open /* SY <-- */ class NetworkHelper(
                 .build()
         }
     }
+
+    /**
+     * 该作用域当前是否允许走内置代理。
+     *
+     * 没有 Clash 偏好（测试/子类场景）时视为允许，与 [clientFor] 的兜底一致。
+     */
+    fun isProxyScopeEnabled(scope: ProxyScope): Boolean = clashPreferences?.isScopeEnabled(scope) ?: true
     /* SY <-- */
 
     /**

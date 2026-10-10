@@ -170,11 +170,23 @@ class NetworkSource(
             .build()
     }
 
+    // SY -->
+    /**
+     * 网络图源（WebDAV/FTP 书库）读库是否允许走内置代理。
+     *
+     * 读写同一台服务器，所以策略联动：**「上传漫画」没勾选时，读库/下载也一律直连**；
+     * 勾选之后还要「下载漫画」也勾选才真正走代理（两者都勾）。局域网 WebDAV 走外网节点只会 502。
+     */
+    private fun libraryProxyAllowed(): Boolean =
+        network.isProxyScopeEnabled(ProxyScope.MANGA_UPLOAD) &&
+            network.isProxyScopeEnabled(ProxyScope.MANGA_DOWNLOAD)
+    // SY <--
+
     override val client: OkHttpClient
-        get() = if (preferences.bypassProxy) {
+        get() = if (preferences.bypassProxy || !libraryProxyAllowed()) {
             directClient
         } else {
-            // SY --> 「下载漫画」作用域（默认勾选）：读库/取图走不走内置代理
+            // SY --> 「下载漫画」作用域：读库/取图走不走内置代理
             network.clientFor(ProxyScope.MANGA_DOWNLOAD)
             // SY <--
         }

@@ -25,6 +25,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import eu.kanade.presentation.more.settings.Preference
@@ -49,6 +50,15 @@ import uy.kohesive.injekt.api.get
  * 现在全部并发发起，只用这个上限兜住极端情况（订阅里有几百个节点时别一次开几百条连接）。
  */
 private const val TEST_DELAY_CONCURRENCY = 64
+
+/** 延迟由低到高的配色：绿 → 黄 → 红。 */
+private val DELAY_FAST_COLOR = Color(0xFF4CAF50)
+private val DELAY_OK_COLOR = Color(0xFFF9A825)
+private val DELAY_SLOW_COLOR = Color(0xFFE53935)
+
+/** 绿/黄分界与黄/红分界（毫秒）。 */
+private const val DELAY_FAST_MS = 200
+private const val DELAY_OK_MS = 600
 
 object SettingsProxyScreen : SearchableSettings {
 
@@ -337,10 +347,12 @@ private fun ProxyNodesDialog(
                                                         ?.let { stringResource(SYMR.strings.proxy_delay_ms, it) }
                                                         ?: stringResource(SYMR.strings.proxy_delay_failed),
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = if (delay != null) {
-                                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                                    } else {
-                                                        MaterialTheme.colorScheme.error
+                                                    // 延迟由低到高：绿 → 黄 → 红（null 为失败，用主题 error 色）
+                                                    color = when {
+                                                        delay == null -> MaterialTheme.colorScheme.error
+                                                        delay < DELAY_FAST_MS -> DELAY_FAST_COLOR
+                                                        delay < DELAY_OK_MS -> DELAY_OK_COLOR
+                                                        else -> DELAY_SLOW_COLOR
                                                     },
                                                 )
                                             }

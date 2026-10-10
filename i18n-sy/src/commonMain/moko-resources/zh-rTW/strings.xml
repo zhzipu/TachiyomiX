@@ -815,4 +815,6 @@
     <string name="aliyun_pan_sync_data_purge_error">從阿里雲端硬碟清除同步的資料失敗</string>
     <string name="aliyun_pan_not_configured">尚未設定阿里雲端硬碟</string>
     <string name="pref_purge_confirmation_aliyun_pan_message">清除同步資料會從阿里雲端硬碟刪除所有已同步的資料，確定要繼續嗎？</string>
+    <string name="pref_page_indicator_y_offset">頁碼指示器縱向偏移</string>
+    <string name="pref_system_time_y_offset">時間與電量縱向偏移</string>
 </resources>

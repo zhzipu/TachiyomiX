@@ -38,6 +38,16 @@ class ReaderPreferences(
 
     val showSystemTime: Preference<Boolean> = preferenceStore.getBoolean("pref_show_system_time_key", true)
 
+    // SY -->
+    /**
+     * 顶部/底部指示器的纵向偏移（dp，负值向上）。
+     *
+     * 默认 0 = 沿用原本位置（页码贴底、时间电量贴顶），所以新增这两个设置不改变老用户看到的样子。
+     */
+    val pageIndicatorYOffset: Preference<Int> = preferenceStore.getInt("pref_page_indicator_y_offset", 0)
+    val systemTimeYOffset: Preference<Int> = preferenceStore.getInt("pref_system_time_y_offset", 0)
+    // SY <--
+
     val verticalNavigator: Preference<Set<ReadingMode>> = preferenceStore.getEnumSet(
         "pref_vertical_navigator",
         emptySet(),

@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.AlertDialog
@@ -381,6 +382,11 @@ class ReaderActivity : BaseActivity() {
         val state by viewModel.state.collectAsState()
         val showPageNumber by readerPreferences.showPageNumber.collectAsState()
         val showSystemTime by readerPreferences.showSystemTime.collectAsState()
+        // SY -->
+        // 指示器纵向偏移（dp，负值向上）；默认 0 = 与既有版本一致
+        val pageIndicatorYOffset by readerPreferences.pageIndicatorYOffset.collectAsState()
+        val systemTimeYOffset by readerPreferences.systemTimeYOffset.collectAsState()
+        // SY <--
         val showProcessingStatus by readerPreferences.realCuganShowStatus().collectAsState()
         val imageEnhancementEnabled by readerPreferences.realCuganEnabled().collectAsState()
         val enhancementStatus by ImageEnhancer.status.collectAsState()
@@ -412,21 +418,25 @@ class ReaderActivity : BaseActivity() {
                     indicatorText = state.pageIndicatorText,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .navigationBarsPadding(),
+                        .navigationBarsPadding()
+                        // 纵向偏移（默认 0 = 原位置；负值向上）
+                        .offset(y = pageIndicatorYOffset.dp),
                 )
             }
 
             if (!state.menuVisible && showSystemTime) {
-                // 时间在顶端左侧、电量在顶端右侧，分列两端
+                // 时间在顶端左侧、电量在顶端右侧，分列两端；纵向偏移同设置（负值向上）
                 ReaderSystemTimeIndicator(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .statusBarsPadding(),
+                        .statusBarsPadding()
+                        .offset(y = systemTimeYOffset.dp),
                 )
                 ReaderBatteryStatusIndicator(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .statusBarsPadding(),
+                        .statusBarsPadding()
+                        .offset(y = systemTimeYOffset.dp),
                 )
             }
 

@@ -33,6 +33,9 @@ private val flashColors = listOf(
     MR.strings.pref_flash_style_white_black to ReaderPreferences.FlashColor.WHITE_BLACK,
 )
 
+/** 页码指示器 / 时间与电量 的纵向偏移范围（dp，负值向上）。 */
+private const val INDICATOR_Y_OFFSET_RANGE = 150
+
 @Composable
 internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
     val readerTheme by screenModel.preferences.readerTheme.collectAsState()
@@ -63,10 +66,38 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         pref = screenModel.preferences.showPageNumber,
     )
 
+    // SY -->
+    // 页码指示器的纵向偏移：默认 0 = 原本贴底的位置，负值向上。
+    val pageIndicatorYOffsetPref = screenModel.preferences.pageIndicatorYOffset
+    val pageIndicatorYOffset by pageIndicatorYOffsetPref.collectAsState()
+    SliderItem(
+        label = stringResource(SYMR.strings.pref_page_indicator_y_offset),
+        value = pageIndicatorYOffset,
+        valueRange = -INDICATOR_Y_OFFSET_RANGE..INDICATOR_Y_OFFSET_RANGE,
+        steps = INDICATOR_Y_OFFSET_RANGE * 2 - 1,
+        valueString = "$pageIndicatorYOffset dp",
+        onChange = { pageIndicatorYOffsetPref.set(it) },
+    )
+    // SY <--
+
     CheckboxItem(
         label = stringResource(MR.strings.pref_show_system_time),
         pref = screenModel.preferences.showSystemTime,
     )
+
+    // SY -->
+    // 时间与电量的纵向偏移：默认 0 = 原本贴顶的位置，负值向上。
+    val systemTimeYOffsetPref = screenModel.preferences.systemTimeYOffset
+    val systemTimeYOffset by systemTimeYOffsetPref.collectAsState()
+    SliderItem(
+        label = stringResource(SYMR.strings.pref_system_time_y_offset),
+        value = systemTimeYOffset,
+        valueRange = -INDICATOR_Y_OFFSET_RANGE..INDICATOR_Y_OFFSET_RANGE,
+        steps = INDICATOR_Y_OFFSET_RANGE * 2 - 1,
+        valueString = "$systemTimeYOffset dp",
+        onChange = { systemTimeYOffsetPref.set(it) },
+    )
+    // SY <--
 
     val verticalNavigatorModes by screenModel.preferences.verticalNavigator.collectAsState()
 

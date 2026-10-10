@@ -932,4 +932,14 @@
     <string name="proxy_refresh_nodes">Refresh nodes</string>
     <string name="pref_page_indicator_y_offset">Page indicator vertical offset</string>
     <string name="pref_system_time_y_offset">Time &amp; battery vertical offset</string>
+    <string name="pref_proxy_scope">Proxy scope</string>
+    <string name="pref_proxy_scope_online_reading">Online reading</string>
+    <string name="pref_proxy_scope_manga_download">Manga download</string>
+    <string name="pref_proxy_scope_manga_upload">Manga upload</string>
+    <string name="pref_proxy_scope_extension_repo">Extension repository</string>
+    <string name="pref_proxy_scope_extension_download">Extension download &amp; update</string>
+    <string name="pref_proxy_scope_sync">Sync service</string>
+    <string name="pref_proxy_scope_webdav">WebDAV sync</string>
+    <string name="pref_proxy_scope_version_check">Version check</string>
+    <string name="pref_proxy_scope_update_download">Update download</string>
 </resources>

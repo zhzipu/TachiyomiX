@@ -35,6 +35,18 @@ class ClashPreferences(
     /** Manual HTTP proxy port. */
     val httpProxyPort: Preference<String> = preferenceStore.getString("http_proxy_port", "8080")
 
+    // SY --> 作用域：决定哪几类流量走内置代理
+    /**
+     * 某个作用域是否走内置代理。
+     *
+     * [ClashProxySelector] 每次请求都会读它，所以改开关**立即生效**、不需要重建 OkHttpClient。
+     */
+    fun proxyScope(scope: ProxyScope): Preference<Boolean> =
+        preferenceStore.getBoolean("clash_scope_${scope.key}", scope.defaultEnabled)
+
+    fun isScopeEnabled(scope: ProxyScope): Boolean = proxyScope(scope).get()
+    // SY <--
+
     fun proxyPort(): Int = httpPort.get().toIntOrNull() ?: 7890
 
     fun baseUrl(): String = "http://127.0.0.1:${proxyPort()}"

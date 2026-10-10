@@ -4,9 +4,12 @@ import android.content.Context
 import eu.kanade.domain.sync.SyncPreferences
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.sync.SyncNotifier
+import eu.kanade.tachiyomi.network.ClashPreferences
+import eu.kanade.tachiyomi.network.ClashProxySelector
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.PUT
+import eu.kanade.tachiyomi.network.ProxyScope
 import eu.kanade.tachiyomi.network.await
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -38,6 +41,8 @@ class SyncYomiSyncService(
 
     private val protoBuf: ProtoBuf = Injekt.get(),
 ) : SyncService(context, json, syncPreferences) {
+
+    private val clashPreferences: ClashPreferences = Injekt.get()
 
     private class SyncYomiException(message: String?) : Exception(message)
 
@@ -116,7 +121,9 @@ class SyncYomiSyncService(
             headers = headers,
         )
 
-        val client = OkHttpClient()
+        val client = OkHttpClient.Builder()
+            .proxySelector(ClashProxySelector(clashPreferences, ProxyScope.SYNC))
+            .build()
         val response = client.newCall(downloadRequest).await()
 
         if (response.code == HttpStatus.SC_NOT_MODIFIED) {
@@ -180,6 +187,7 @@ class SyncYomiSyncService(
             .connectTimeout(timeout, TimeUnit.SECONDS)
             .readTimeout(timeout, TimeUnit.SECONDS)
             .writeTimeout(timeout, TimeUnit.SECONDS)
+            .proxySelector(ClashProxySelector(clashPreferences, ProxyScope.SYNC))
             .build()
 
         val byteArray = protoBuf.encodeToByteArray(Backup.serializer(), backup)
@@ -239,7 +247,9 @@ class SyncYomiSyncService(
                     body = requestBody,
                 )
 
-                val client = OkHttpClient()
+                val client = OkHttpClient.Builder()
+                    .proxySelector(ClashProxySelector(clashPreferences, ProxyScope.SYNC))
+                    .build()
                 client.newCall(request).await().close()
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR) { "Failed to report sync event: ${e.message}" }

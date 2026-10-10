@@ -2,8 +2,11 @@
 
 import android.content.Context
 import eu.kanade.domain.sync.SyncPreferences
+import eu.kanade.tachiyomi.network.ClashPreferences
+import eu.kanade.tachiyomi.network.ClashProxySelector
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
+import eu.kanade.tachiyomi.network.ProxyScope
 import eu.kanade.tachiyomi.network.await
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -76,6 +79,8 @@ class AliyunPanService(private val context: Context) {
 
     private val syncPreferences: SyncPreferences = Injekt.get()
 
+    private val clashPreferences: ClashPreferences = Injekt.get()
+
     private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
@@ -85,6 +90,7 @@ class AliyunPanService(private val context: Context) {
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
+        .proxySelector(ClashProxySelector(clashPreferences, ProxyScope.SYNC))
         .build()
 
     @Volatile

@@ -32,6 +32,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
+import eu.kanade.tachiyomi.network.ProxyScope
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
@@ -170,7 +171,13 @@ class NetworkSource(
     }
 
     override val client: OkHttpClient
-        get() = if (preferences.bypassProxy) directClient else super.client
+        get() = if (preferences.bypassProxy) {
+            directClient
+        } else {
+            // SY --> 「下载漫画」作用域（默认勾选）：读库/取图走不走内置代理
+            network.clientFor(ProxyScope.MANGA_DOWNLOAD)
+            // SY <--
+        }
 
     /** 与本地图源一致：只显示名字，不要 `名字 (MULTI)` 这种语言后缀。 */
     override fun toString(): String = name
@@ -898,11 +905,11 @@ class NetworkSource(
 
     // 内部
 
-    private fun fileSystem(): RemoteFileSystem {
+    private fun fileSystem(apiClient: OkHttpClient = client): RemoteFileSystem {
         check(preferences.isConfigured) {
             context.stringResource(SYMR.strings.network_source_not_configured)
         }
-        return preferences.newFileSystem(client)
+        return preferences.newFileSystem(apiClient)
     }
 
     /**
@@ -1024,7 +1031,10 @@ class NetworkSource(
      * 语义上属于「库级操作」，所以包一层 [NetworkLibraryClient]。
      * 没配置好时 [fileSystem] 会抛异常，由调用方（`UploadManager`）转成「未配置」提示。
      */
-    fun newLibraryClient(): NetworkLibraryClient = NetworkLibraryClient(fileSystem())
+    fun newLibraryClient(): NetworkLibraryClient =
+        // SY --> 「上传漫画」作用域：写库（上传）单独一条链路，默认直连
+        NetworkLibraryClient(fileSystem(network.clientFor(ProxyScope.MANGA_UPLOAD)))
+        // SY <--
 
     /**
      * 单个漫画出问题（服务端偶发 5xx、某个文件读不动）不该让整个列表挂掉，

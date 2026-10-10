@@ -957,12 +957,12 @@ class UploadManager(
         }
 
         val client = try {
-            // 上传走的网络策略与读库完全一致：`newLibraryClient()` 内部是
-            // `NetworkSource.fileSystem()` → `NetworkSource.client`，
-            // 而那个 `client` 已经按「不通过软件代理」开关切成了直连客户端。
-            // 换句话说，开了那个开关，上传也不会绕道内置 Clash / 手动 HTTP 代理。
+            // 上传走的网络策略由「上传漫画」作用域决定：`newLibraryClient()` 内部是
+            // `NetworkSource.fileSystem(network.clientFor(ProxyScope.MANGA_UPLOAD))`，
+            // 即勾选「上传漫画」才走内置 Clash / 手动 HTTP 代理，未勾选（默认）直连；
+            // 网络图源自带的「不通过软件代理」开关仍然优先（它直接给出 NO_PROXY 客户端）。
             // 上传链路上只有这一处会访问网络（章节图片、封面都读本地文件），
-            // 所以**不要**在这里另起 OkHttp，否则就把这个开关漏掉了。
+            // 所以**不要**在这里另起 OkHttp，否则就把这些作用域/开关漏掉了。
             networkSource.newLibraryClient()
         } catch (e: Exception) {
             failChapter(task, context.stringResource(SYMR.strings.upload_not_configured))

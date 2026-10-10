@@ -84,6 +84,27 @@ open /* SY <-- */ class NetworkHelper(
         .proxy(Proxy.NO_PROXY)
         .build()
 
+    /* SY --> */
+    /**
+     * 按**作用域**取客户端：该作用域勾选"走内置代理"才用代理，否则直连。
+     *
+     * [ClashProxySelector] 每次请求都重新读偏好，所以切换作用域开关立即生效、不用重建客户端。
+     * 基类 [client] 本身就带"在线阅读"作用域，所以图源 / 追番登录等默认跟着在线阅读走。
+     */
+    private val scopedClients = java.util.concurrent.ConcurrentHashMap<ProxyScope, OkHttpClient>()
+
+    fun clientFor(scope: ProxyScope): OkHttpClient {
+        val clash = clashPreferences ?: return client
+        return scopedClients.getOrPut(scope) {
+            // 用 client.newBuilder()（而不是共享的 clientBuilder）：新 builder 是独立的，
+            // 不会把拦截器重复加到同一个 builder 上，换掉的只有代理选择器。
+            client.newBuilder()
+                .proxySelector(ClashProxySelector(clash, scope))
+                .build()
+        }
+    }
+    /* SY <-- */
+
     /**
      * @deprecated Since extension-lib 1.5
      */

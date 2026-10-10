@@ -32,6 +32,7 @@ import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.tachiyomi.clash.ClashManager
 import eu.kanade.tachiyomi.network.ClashPreferences
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.network.ProxyScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -80,6 +81,7 @@ object SettingsProxyScreen : SearchableSettings {
         return listOf(
             getHttpProxyGroup(clashPreferences, clashManager, networkHelper),
             getClashProxyGroup(clashPreferences, clashManager, networkHelper),
+            getProxyScopeGroup(clashPreferences),
         )
     }
 
@@ -195,6 +197,53 @@ object SettingsProxyScreen : SearchableSettings {
                         onClick = { open = true },
                     )
                 },
+            ),
+        )
+    }
+
+    @Composable
+    private fun getProxyScopeGroup(
+        clashPreferences: ClashPreferences,
+    ): Preference.PreferenceGroup {
+        return Preference.PreferenceGroup(
+            title = stringResource(SYMR.strings.pref_proxy_scope),
+            preferenceItems = listOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = clashPreferences.proxyScope(ProxyScope.ONLINE_READING),
+                    title = stringResource(SYMR.strings.pref_proxy_scope_online_reading),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = clashPreferences.proxyScope(ProxyScope.MANGA_DOWNLOAD),
+                    title = stringResource(SYMR.strings.pref_proxy_scope_manga_download),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = clashPreferences.proxyScope(ProxyScope.MANGA_UPLOAD),
+                    title = stringResource(SYMR.strings.pref_proxy_scope_manga_upload),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = clashPreferences.proxyScope(ProxyScope.EXTENSION_REPO),
+                    title = stringResource(SYMR.strings.pref_proxy_scope_extension_repo),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = clashPreferences.proxyScope(ProxyScope.EXTENSION_DOWNLOAD),
+                    title = stringResource(SYMR.strings.pref_proxy_scope_extension_download),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = clashPreferences.proxyScope(ProxyScope.SYNC),
+                    title = stringResource(SYMR.strings.pref_proxy_scope_sync),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = clashPreferences.proxyScope(ProxyScope.WEBDAV),
+                    title = stringResource(SYMR.strings.pref_proxy_scope_webdav),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = clashPreferences.proxyScope(ProxyScope.VERSION_CHECK),
+                    title = stringResource(SYMR.strings.pref_proxy_scope_version_check),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = clashPreferences.proxyScope(ProxyScope.UPDATE_DOWNLOAD),
+                    title = stringResource(SYMR.strings.pref_proxy_scope_update_download),
+                ),
             ),
         )
     }

@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.extension.installer.Installer
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.network.ProxyScope
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.INSTALLERX_PACKAGE_NAME
 import eu.kanade.tachiyomi.util.system.installerXPackageName
@@ -43,7 +44,7 @@ internal class ExtensionInstaller(
     private val activeSteps = mutableMapOf<Long, MutableStateFlow<InstallStep>>()
     private val extensionInstaller = Injekt.get<BasePreferences>().extensionInstaller
 
-    private val directClient: OkHttpClient = Injekt.get<NetworkHelper>().directClient
+    private val scopeClient: OkHttpClient = Injekt.get<NetworkHelper>().clientFor(ProxyScope.EXTENSION_DOWNLOAD)
 
     /**
      * Adds the given extension to the downloads queue and returns an observable containing its
@@ -64,10 +65,9 @@ internal class ExtensionInstaller(
             try {
                 step.value = InstallStep.Downloading
                 val request = Request.Builder().url(url).build()
-                // Extension APK downloads always bypass the built-in Clash / HTTP
-                // proxy. Extension repos are usually hosted on GitHub, and proxy
-                // nodes often can't reach GitHub's release asset CDN.
-                val response = directClient.newCall(request).execute()
+                // Extension APK downloads follow the「插件下载更新」proxy scope:
+                // 勾选则走内置代理，未勾选（默认）直连。
+                val response = scopeClient.newCall(request).execute()
 
                 if (!response.isSuccessful) {
                     throw Exception("Failed to download extension (HTTP ${response.code})")

@@ -16,6 +16,7 @@ import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.ProgressListener
 import eu.kanade.tachiyomi.network.await
+import eu.kanade.tachiyomi.network.ProxyScope
 import eu.kanade.tachiyomi.network.newCachelessCallWithProgress
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.storage.saveTo
@@ -94,10 +95,10 @@ class AppUpdateDownloadJob(private val context: Context, workerParams: WorkerPar
 
         try {
             // Download the new update.
-            // 必须走 directClient：NetworkHelper 的注释写明「plugin marketplace / update checks / **APK downloads**
-            // 不能走代理」。内置 Clash 的出口节点会把 github.com 的 TLS 握手重置（与更新检查同因），
-            // 走代理时表现为「检查更新正常、下载安装包总是失败」。
-            val response = network.directClient.newCachelessCallWithProgress(GET(url), progressListener)
+            // 走「更新下载」作用域：默认直连（内置 Clash 的出口节点会把 github.com 的 TLS 握手重置，
+            // 与更新检查同因）；用户在作用域里勾选后才会走代理。
+            val response = network.clientFor(ProxyScope.UPDATE_DOWNLOAD)
+                .newCachelessCallWithProgress(GET(url), progressListener)
                 .await()
 
             // File where the apk will be saved.

@@ -4,9 +4,12 @@ import android.content.Context
 import android.util.Log
 import eu.kanade.domain.sync.SyncPreferences
 import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.network.ClashPreferences
+import eu.kanade.tachiyomi.network.ClashProxySelector
 import eu.kanade.tachiyomi.network.DELETE
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.PUT
+import eu.kanade.tachiyomi.network.ProxyScope
 import eu.kanade.tachiyomi.network.await
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
@@ -72,10 +75,13 @@ class WebDavSyncService(
 
     private val protoBuf: ProtoBuf = Injekt.get()
 
+    private val clashPreferences: ClashPreferences = Injekt.get()
+
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
+        .proxySelector(ClashProxySelector(clashPreferences, ProxyScope.WEBDAV))
         .build()
 
     override suspend fun doSync(syncData: SyncData): Backup? {

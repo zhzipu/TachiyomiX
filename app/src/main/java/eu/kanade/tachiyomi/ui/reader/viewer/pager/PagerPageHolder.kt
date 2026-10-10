@@ -148,7 +148,16 @@ class PagerPageHolder(
 
     /** 双页里「还没出画面」的那一页所在侧；单页或两页都齐时为 null。 */
     private fun missingHalfSide(): Boolean? {
-        val extra = extraPage ?: return null
+        val extra = extraPage
+        if (extra == null) {
+            // 双页模式下还没配对（下一张的图还在下载，凑不出跨页）：
+            // 本页与下一张都还不是整页时，下一张会落在**屏幕右半**；它没就绪就在右半显示加载圈，
+            // 否则这一侧只有黑底、用户看不到「正在加载」。下一张就绪后这里返回 null 自动收起。
+            if (!viewer.config.doublePages || page.fullPage) return null
+            val next = page.chapter.pages?.getOrNull(page.index + 1) ?: return null
+            if (next.fullPage) return null
+            return if (next.status == Page.State.Ready) null else false
+        }
         // 只看 status：stream 在本地页/增强流换过时会为 null，用它判断"就绪"会误判成两页都没好，
         // 结果把加载圈也一起藏掉（表现为另一侧只有黑屏）。
         val mainReady = page.status == Page.State.Ready

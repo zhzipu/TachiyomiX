@@ -32,7 +32,10 @@ import eu.kanade.tachiyomi.clash.ClashManager
 import eu.kanade.tachiyomi.network.ClashPreferences
 import eu.kanade.tachiyomi.network.NetworkHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
@@ -40,6 +43,12 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+
+/**
+ * 并发测速上限。原来是一个节点接一个节点地测，节点多时（每个最多等 5s 超时）要等几分钟；
+ * 现在全部并发发起，只用这个上限兜住极端情况（订阅里有几百个节点时别一次开几百条连接）。
+ */
+private const val TEST_DELAY_CONCURRENCY = 64
 
 object SettingsProxyScreen : SearchableSettings {
 
@@ -267,11 +276,23 @@ private fun ProxyNodesDialog(
                                 onClick = {
                                     testing = true
                                     scope.launch {
-                                        nodes.forEach { node ->
-                                            val result = runCatching { clashManager.testDelay(node) }.getOrNull()
-                                            delays = delays + (node to result)
+                                        // 并发测速：原先 nodes.forEach 串行，一个节点最多要等 5s 超时，
+                                        // 订阅里几十个节点就是好几分钟。现在一起发起，谁先回来谁先显示结果。
+                                        val gate = Semaphore(TEST_DELAY_CONCURRENCY)
+                                        try {
+                                            coroutineScope {
+                                                nodes.forEach { node ->
+                                                    launch {
+                                                        val result = runCatching {
+                                                            gate.withPermit { clashManager.testDelay(node) }
+                                                        }.getOrNull()
+                                                        delays = delays + (node to result)
+                                                    }
+                                                }
+                                            }
+                                        } finally {
+                                            testing = false
                                         }
-                                        testing = false
                                     }
                                 },
                             ) {

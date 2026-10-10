@@ -149,8 +149,10 @@ class PagerPageHolder(
     /** 双页里「还没出画面」的那一页所在侧；单页或两页都齐时为 null。 */
     private fun missingHalfSide(): Boolean? {
         val extra = extraPage ?: return null
-        val mainReady = page.status == Page.State.Ready && page.stream != null
-        val extraReady = extra.status == Page.State.Ready && extra.stream != null
+        // 只看 status：stream 在本地页/增强流换过时会为 null，用它判断"就绪"会误判成两页都没好，
+        // 结果把加载圈也一起藏掉（表现为另一侧只有黑屏）。
+        val mainReady = page.status == Page.State.Ready
+        val extraReady = extra.status == Page.State.Ready
         return when {
             mainReady && !extraReady -> false
             extraReady && !mainReady -> true
@@ -172,6 +174,8 @@ class PagerPageHolder(
     private fun showProgressIndicator() {
         initProgressIndicator()
         progressIndicatorSide = missingHalfSide()
+        // 双页合并出图后会把新图插到最底层、但保险起见把圈提到最前，避免被画面盖住
+        progressIndicator?.bringToFront()
         progressIndicator?.show()
         applyProgressIndicatorSide()
     }
@@ -343,7 +347,7 @@ class PagerPageHolder(
         )
         // 双页：配对页可能比本页先就绪，这时先把它画在它自己那一侧（右半），
         // 本页就绪后再走正常合并，避免「一边已经加载好了却什么都不显示」。
-        if (enhancedFile == null && page.stream == null) {
+        if (enhancedFile == null && page.status != Page.State.Ready && extraPage?.status == Page.State.Ready) {
             val extraStreamFn = extraPage?.stream
             if (extraStreamFn != null) {
                 renderSingleHalf(Buffer().readFrom(extraStreamFn().buffered(16)), onLeft = false)

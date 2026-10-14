@@ -454,6 +454,27 @@
     <string name="pref_model_packs_installed_summary">ID %1$s · version %2$s · %3$s</string>
     <string name="pref_model_packs_install_hint">Model packs are installed manually: get the matching model pack APK, install it with the system installer, then come back to this screen.</string>
     <string name="pref_model_packs_uninstall_failed">Couldn\'t open the system uninstall screen</string>
+    <!-- SY: 插件目录（远端模型包仓库） -->
+    <string name="pref_model_packs_repo">Plugin repository</string>
+    <string name="pref_model_packs_repo_check">Check for updates</string>
+    <string name="pref_model_packs_repo_never">Not fetched yet</string>
+    <string name="pref_model_packs_repo_checking">Reading the plugin repository…</string>
+    <string name="pref_model_packs_repo_updated">%1$d plugins · fetched %2$s</string>
+    <string name="pref_model_packs_repo_failed">Failed to read: %1$s</string>
+    <string name="pref_model_packs_repo_empty">The repository has no plugin yet</string>
+    <string name="pref_model_packs_repo_hint">If it keeps failing, adjust the “Model pack repository” switch in Settings → Proxy → Scope.</string>
+    <string name="pref_model_packs_updates">Updates</string>
+    <string name="pref_model_packs_available">Available</string>
+    <string name="pref_model_packs_update_summary">installed %1$s → repository %2$s · %3$s</string>
+    <string name="pref_model_packs_available_summary">version %1$s · %2$s</string>
+    <string name="pref_model_packs_update_available">New version %1$s (versionCode %2$s)</string>
+    <string name="pref_model_packs_downloading">Downloading…</string>
+    <string name="pref_model_packs_size_unknown">size unknown</string>
+    <string name="pref_model_packs_install_started">Downloaded — waiting for the installer</string>
+    <string name="pref_model_packs_error_download">%1$s: download failed — %2$s</string>
+    <string name="pref_model_packs_error_verify">%1$s: verification failed — %2$s</string>
+    <string name="pref_model_packs_install_failed">%1$s: install failed — %2$s</string>
+    <!-- SY <-->
     <string name="reader_processing_backend">Processing backend</string>
     <string name="reader_backend_vulkan">Vulkan GPU</string>
     <string name="reader_backend_qualcomm_npu">Qualcomm NPU</string>

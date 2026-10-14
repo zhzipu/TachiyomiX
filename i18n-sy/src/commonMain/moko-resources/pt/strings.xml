@@ -78,7 +78,7 @@
     <string name="data_saver_ignore_jpeg">Ignorar imagens JPEG</string>
     <string name="data_saver_ignore_gif">Ignorar animações GIF</string>
     <string name="data_saver_image_quality">Qualidade de Imagem</string>
-    <string name="data_saver_image_quality_summary">Valores mais altos significam que é guardada uma maior percentagem da qualidade de imagem, mas também que o tamanho do ficheiro é maior, 80% é uma boa mediana entre tamanho de ficheiro e qualidade de imagem</string>
+    <string name="data_saver_image_quality_summary">Valores mais altos significam que é guardada uma maior percentagem da qualidade de imagem, mas também que o tamanho do ficheiro é maior, 80%% é uma boa mediana entre tamanho de ficheiro e qualidade de imagem</string>
     <string name="data_saver_image_format">Comprimir para JPEG</string>
     <string name="data_saver_image_format_summary_on">O tamanho de ficheiros JPEG é consideravelmente menor que o dos WEBP (i.e., poupam-se mais dados), mas também faz as imagens perderem mais qualidade.\nAtualmente a comprimir para JPEG</string>
     <string name="data_saver_image_format_summary_off">O tamanho de ficheiros JPEG é consideravelmente menor que o dos WEBP (i.e., poupam-se mais dados), mas também faz as imagens perderem mais qualidade.\nAtualmente a comprimir para WEBP</string>

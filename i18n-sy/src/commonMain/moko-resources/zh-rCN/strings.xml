@@ -128,7 +128,7 @@
     <string name="data_saver_ignore_jpeg">忽略 Jpeg 图像</string>
     <string name="data_saver_ignore_gif">忽略 Gif 动画</string>
     <string name="data_saver_image_quality">图像质量</string>
-    <string name="data_saver_image_quality_summary">更高值意味着更高的保存的图像质量，但这意味着更大的文件大小，80%可以很好地平衡图片质量和文件大小</string>
+    <string name="data_saver_image_quality_summary">更高值意味着更高的保存的图像质量，但这意味着更大的文件大小，80%%可以很好地平衡图片质量和文件大小</string>
     <string name="data_saver_image_format">压缩为 Jpeg</string>
     <string name="data_saver_image_format_summary_on">Jpeg 文件体积要比 Webp 小得多（意味着能节省更多流量），但也会降低图像质量。\n目前压缩为 Jpeg</string>
     <string name="data_saver_image_format_summary_off">Jpeg 文件的大小要比 Webp 小得多（意味着节省了更多的流量），但它也会使图像损失更多的质量。\n目前压缩为 Webp</string>
@@ -874,6 +874,8 @@
     <string name="pref_proxy_scope_manga_upload">上传漫画</string>
     <string name="pref_proxy_scope_extension_repo">插件仓库</string>
     <string name="pref_proxy_scope_extension_download">插件下载更新</string>
+    <string name="pref_proxy_scope_model_pack_repo">模型插件仓库</string>
+    <string name="pref_proxy_scope_model_pack_download">模型插件下载</string>
     <string name="pref_proxy_scope_sync">同步服务</string>
     <string name="pref_proxy_scope_webdav">WebDAV 同步</string>
     <string name="pref_proxy_scope_version_check">版本检测</string>

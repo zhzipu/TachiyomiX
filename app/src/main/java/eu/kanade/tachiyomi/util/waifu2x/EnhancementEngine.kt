@@ -13,6 +13,8 @@ const val ENGINE_REALCUGAN_PRO = "realcugan-pro"
 const val ENGINE_REALCUGAN_NOSE = "realcugan-nose"
 const val ENGINE_REALESRGAN = "realesrgan"
 const val ENGINE_SPAN_NOMOSUNI = "span-nomosuni"
+const val ENGINE_SPAN_NOMOSUNI_4X = "span-nomosuni-4x"
+const val ENGINE_HFA2K_SPAN = "hfa2k-span"
 const val ENGINE_SUDO_ULTRACOMPACT = "sudo-ultracompact"
 const val ENGINE_ACNET = "acnet"
 
@@ -61,6 +63,28 @@ object EnhancementEngines {
         android.util.Log.e("EnhancementEngine", "engineFor threw for ${model.key}", t)
         builtIn[model.engine]
     }
+
+    /**
+     * 走通用 ncnn 通道（[Waifu2x.initW2xEx]）的模型：engine 字符串 → 包内模型文件前缀 / halo / QNN context。
+     *
+     * 这类引擎没有专属的「内置原生初始化函数」，只吃模型包里的 `<stem>.param` + `<stem>.bin`，
+     * 因此**新增同架构的模型**（换权重、换倍率）只需在模型包的 `modelpack.json` 里声明新的 engine 值、
+     * 再在这里补一行即可，宿主其余代码不用动。
+     *
+     * ⚠️ 必须声明在 [builtIn] 之前：Kotlin 的 `object` 属性按书写顺序初始化，[builtIn] 的初始化器会读它。
+     */
+    private val ncnnModelSpecs: Map<String, NcnnModelSpec> = mapOf(
+        // SPAN NomosUni 2x（带自己的 QNN context）
+        ENGINE_SPAN_NOMOSUNI to NcnnModelSpec("2x-NomosUni-SPAN-multijpg-ldl", 24, "span-nomosuni-x2"),
+        // SPAN NomosUni 4x：同架构同 halo，只是权重与倍率不同（宿主的 QNN context 只覆盖 2x，故不声明 NPU）
+        ENGINE_SPAN_NOMOSUNI_4X to NcnnModelSpec("4x-NomosUni-SPAN-multijpg", 24),
+        // HFA2k SPAN 2x（Omni Small 模型包实际带的权重——OmniSR 走不通 pnnx 通路，见 .workbuddy/enhance-packs/README.md）
+        ENGINE_HFA2K_SPAN to NcnnModelSpec("2x-HFA2kSPAN", 24),
+        // sudo UltraCompact
+        ENGINE_SUDO_ULTRACOMPACT to NcnnModelSpec("2x-sudo-UltraCompact", 10),
+        // ACNet（Anime4KCPP Net / ACNetGLSL 同源）
+        ENGINE_ACNET to NcnnModelSpec("acnet", 10),
+    )
 
     /** 内置引擎表：engine 字符串 → 既有原生初始化/处理调用。 */
     private val builtIn: Map<String, EnhancementEngine> = mapOf(
@@ -166,17 +190,18 @@ object EnhancementEngines {
             },
             processor = Waifu2x::processRealESRGAN,
         ),
-        // SPAN NomosUni（通用 ncnn 模型，带自己的 QNN context）
-        ENGINE_SPAN_NOMOSUNI to BuiltInEngine(
-            ENGINE_SPAN_NOMOSUNI,
+    ) + ncnnModelSpecs.mapValues { (engine, spec) ->
+        // 通用 ncnn 通道：模型目录由描述符解析，模型文件前缀 / padding / QNN context 见 [ncnnModelSpecs]
+        BuiltInEngine(
+            engine,
             initializer = { context, modelDir, _, settings ->
                 Waifu2x.initW2xEx(
                     context,
                     modelDir,
-                    modelStem = "2x-NomosUni-SPAN-multijpg-ldl",
+                    modelStem = spec.stem,
                     scale = settings.scale,
-                    qnnModelName = "span-nomosuni-x2",
-                    padding = 24,
+                    qnnModelName = spec.qnnModelName,
+                    padding = spec.padding,
                     tileSleepMs = settings.tileSleepMs,
                     tileSize = settings.tileSize,
                     precision = settings.precision,
@@ -185,49 +210,22 @@ object EnhancementEngines {
                 )
             },
             processor = Waifu2x::processW2xEx,
-        ),
-        // sudo UltraCompact
-        ENGINE_SUDO_ULTRACOMPACT to BuiltInEngine(
-            ENGINE_SUDO_ULTRACOMPACT,
-            initializer = { context, modelDir, _, settings ->
-                Waifu2x.initW2xEx(
-                    context,
-                    modelDir,
-                    modelStem = "2x-sudo-UltraCompact",
-                    scale = settings.scale,
-                    qnnModelName = null,
-                    padding = 10,
-                    tileSleepMs = settings.tileSleepMs,
-                    tileSize = settings.tileSize,
-                    precision = settings.precision,
-                    fp16Arithmetic = settings.fp16Arithmetic,
-                    processingBackend = settings.backend,
-                )
-            },
-            processor = Waifu2x::processW2xEx,
-        ),
-        // ACNet（Anime4KCPP Net / ACNetGLSL 同源）：2x 动漫超分 ncnn 模型，走通用 ncnn 入口
-        ENGINE_ACNET to BuiltInEngine(
-            ENGINE_ACNET,
-            initializer = { context, modelDir, _, settings ->
-                Waifu2x.initW2xEx(
-                    context,
-                    modelDir,
-                    modelStem = "acnet",
-                    scale = settings.scale,
-                    qnnModelName = null,
-                    padding = 10,
-                    tileSleepMs = settings.tileSleepMs,
-                    tileSize = settings.tileSize,
-                    precision = settings.precision,
-                    fp16Arithmetic = settings.fp16Arithmetic,
-                    processingBackend = settings.backend,
-                )
-            },
-            processor = Waifu2x::processW2xEx,
-        ),
-    )
+        )
+    }
 }
+
+/**
+ * 一个通用 ncnn 模型的宿主侧参数。
+ *
+ * @param stem 包内模型文件前缀（`<stem>.param` / `<stem>.bin`）。
+ * @param padding 推理时给每个 tile 四周预留的 halo 像素数（模型感受野决定；太小会在 tile 边界留下接缝）。
+ * @param qnnModelName 宿主 `assets/qnn-contexts/` 里的 QNN context 名；没有对应 context 的模型留空 = 不支持 NPU。
+ */
+private data class NcnnModelSpec(
+    val stem: String,
+    val padding: Int,
+    val qnnModelName: String? = null,
+)
 
 /** 内置引擎：模型目录由描述符解析，剩下就是既有原生调用。 */
 private const val TAG = "EnhancementEngine"

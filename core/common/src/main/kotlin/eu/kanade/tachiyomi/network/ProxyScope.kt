@@ -33,6 +33,12 @@ enum class ProxyScope(
     /** 插件下载更新：下载/更新扩展 APK。 */
     EXTENSION_DOWNLOAD("extension_download", false),
 
+    /** 模型插件仓库：拉取模型包插件目录（TachiyomiX-ModelPack-Catalog 的 index.min.json）。 */
+    MODEL_PACK_REPO("model_pack_repo", false),
+
+    /** 模型插件下载：下载/更新模型包插件 APK。 */
+    MODEL_PACK_DOWNLOAD("model_pack_download", false),
+
     /** 同步服务：SyncYomi、阿里云盘、Google Drive 等。 */
     SYNC("sync", false),
 

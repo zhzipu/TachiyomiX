@@ -9,6 +9,18 @@ import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.core.common.preference.Preference as PreferenceData
 
+/**
+ * [String.format] 的安全版本：**翻译串里出现裸 `%`**（例如中文「80%可以」）时 `format` 会抛
+ * `UnknownFormatConversionException`，直接把整个设置页打崩 —— 2026-10-14 真机复现：
+ * `MoreTab → PreferenceScreen → ListPreference`，`Conversion = '可'`。
+ * 格式串坏了就原样显示，宁可少一次替换也不要崩。
+ */
+private fun String.safeFormat(vararg args: Any?): String = try {
+    format(*args)
+} catch (_: Exception) {
+    this
+}
+
 sealed class Preference {
     abstract val title: String
     abstract val enabled: Boolean
@@ -74,7 +86,7 @@ sealed class Preference {
             override val title: String,
             override val subtitle: String? = "%s",
             val subtitleProvider: @Composable (value: T, entries: Map<T, String>) -> String? =
-                { v, e -> subtitle?.format(e[v]) },
+                { v, e -> subtitle?.safeFormat(e[v]) },
             override val icon: ImageVector? = null,
             override val enabled: Boolean = true,
             override val onValueChanged: suspend (value: T) -> Boolean = { true },
@@ -96,7 +108,7 @@ sealed class Preference {
             override val title: String,
             override val subtitle: String? = "%s",
             val subtitleProvider: @Composable (value: String, entries: Map<String, String>) -> String? =
-                { v, e -> subtitle?.format(e[v]) },
+                { v, e -> subtitle?.safeFormat(e[v]) },
             override val icon: ImageVector? = null,
             override val enabled: Boolean = true,
             override val onValueChanged: suspend (value: String) -> Unit = {},
@@ -120,7 +132,7 @@ sealed class Preference {
                             .takeUnless { it.isBlank() }
                     }
                         ?: stringResource(MR.strings.none)
-                    subtitle?.format(combined)
+                    subtitle?.safeFormat(combined)
                 },
             override val icon: ImageVector? = null,
             override val enabled: Boolean = true,

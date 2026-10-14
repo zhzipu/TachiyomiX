@@ -285,7 +285,7 @@
     <string name="data_saver">Risparmio dati</string>
     <string name="data_saver_summary">Comprimi immagini prima di scaricarle o caricarle nel lettore</string>
     <string name="data_saver_downloader">Usa risparmio dati nel downloader</string>
-    <string name="data_saver_image_quality_summary">Valori più alti significano che viene salvata un\'immagine con qualità più elevata, ma significa anche che la dimensione del file è più grande, 80% è un buon compromesso tra dimensione file e qualità dell\'immagine</string>
+    <string name="data_saver_image_quality_summary">Valori più alti significano che viene salvata un\'immagine con qualità più elevata, ma significa anche che la dimensione del file è più grande, 80%% è un buon compromesso tra dimensione file e qualità dell\'immagine</string>
     <string name="data_saver_image_format_summary_on">La dimensione del file Jpeg è notevolmente più piccola di quella di Webp (il che significa che vengono risparmiati più dati), ma l\'immagine ha una qualità inferiore.\nAttualmente utilizza Jpeg</string>
     <string name="data_saver_image_format_summary_off">La dimensione del file Jpeg è notevolmente più piccola di quella di Webp (il che significa che vengono risparmiati più dati), ma l\'immagine ha una qualità inferiore.\nAttualmente utilizza Webp</string>
     <string name="bandwidth_hero">Bandwidth Hero (necessita di un server proxy Bandwidth Hero)</string>

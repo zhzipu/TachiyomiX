@@ -154,6 +154,27 @@
     <string name="pref_model_packs_installed_summary">ID %1$s · 版本 %2$s · 占用 %3$s</string>
     <string name="pref_model_packs_install_hint">模型包需自行安装：获取对应的模型包 APK 后用系统安装器安装，返回本页即可识别。</string>
     <string name="pref_model_packs_uninstall_failed">无法打开系统卸载界面</string>
+    <!-- SY: 插件目录（远端模型包仓库） -->
+    <string name="pref_model_packs_repo">插件仓库</string>
+    <string name="pref_model_packs_repo_check">检查更新</string>
+    <string name="pref_model_packs_repo_never">尚未读取</string>
+    <string name="pref_model_packs_repo_checking">正在读取插件仓库…</string>
+    <string name="pref_model_packs_repo_updated">共 %1$d 个插件 · 读取于 %2$s</string>
+    <string name="pref_model_packs_repo_failed">读取失败：%1$s</string>
+    <string name="pref_model_packs_repo_empty">仓库里还没有插件</string>
+    <string name="pref_model_packs_repo_hint">若一直读取失败，可在「设置 → 网络代理 → 作用域」里调整「模型插件仓库」开关。</string>
+    <string name="pref_model_packs_updates">可更新</string>
+    <string name="pref_model_packs_available">可安装</string>
+    <string name="pref_model_packs_update_summary">已装 %1$s → 仓库 %2$s · %3$s</string>
+    <string name="pref_model_packs_available_summary">版本 %1$s · %2$s</string>
+    <string name="pref_model_packs_update_available">有新版本 %1$s（versionCode %2$s）</string>
+    <string name="pref_model_packs_downloading">下载中…</string>
+    <string name="pref_model_packs_size_unknown">大小未知</string>
+    <string name="pref_model_packs_install_started">已下载，等待安装器安装</string>
+    <string name="pref_model_packs_error_download">%1$s：下载失败 — %2$s</string>
+    <string name="pref_model_packs_error_verify">%1$s：校验失败 — %2$s</string>
+    <string name="pref_model_packs_install_failed">%1$s：安装失败 — %2$s</string>
+    <!-- SY <-->
     <string name="reader_processing_backend">处理后端</string>
     <string name="reader_backend_vulkan">Vulkan GPU</string>
     <string name="reader_backend_qualcomm_npu">Qualcomm NPU</string>

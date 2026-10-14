@@ -33,12 +33,15 @@ import eu.kanade.tachiyomi.clash.ClashManager
 import eu.kanade.tachiyomi.network.ClashPreferences
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.ProxyScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -63,9 +66,27 @@ private const val DELAY_OK_MS = 600
 
 object SettingsProxyScreen : SearchableSettings {
 
+    /**
+     * 丢掉连接池里的空闲连接（切代理后必须重建连接，否则旧连接仍然连着旧的出口）。
+     *
+     * 两个必须同时满足的点：
+     * 1. **只能在 IO 线程调用**。OkHttp 关闭连接不是纯内存操作——套接字 close 时 Conscrypt
+     *    会把 TLS 里排队待发的字节写出去，所以 `evictAll()` 会**发起网络写入**。
+     *    放在主线程必然 `android.os.NetworkOnMainThreadException` 闪退（真机实测：
+     *    「网络代理」页拨动 HTTP 代理开关 / 改主机端口，日志里主线程栈顶就是这里）。
+     * 2. **清连接池是尽力而为**，失败不能让设置页崩掉：单条连接 close 抛异常时，
+     *    池子里其余连接照样要清，用户手上的开关也照样要生效。
+     */
     private suspend fun evictConnections(networkHelper: NetworkHelper) {
         withContext(Dispatchers.IO) {
-            networkHelper.client.connectionPool.evictAll()
+            try {
+                networkHelper.client.connectionPool.evictAll()
+            } catch (e: CancellationException) {
+                // 协程取消要照常往上抛，别让它被当成「清池失败」吞掉
+                throw e
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to evict pooled connections" }
+            }
         }
     }
 
@@ -245,6 +266,16 @@ object SettingsProxyScreen : SearchableSettings {
                 Preference.PreferenceItem.SwitchPreference(
                     preference = clashPreferences.proxyScope(ProxyScope.EXTENSION_DOWNLOAD),
                     title = stringResource(SYMR.strings.pref_proxy_scope_extension_download),
+                    enabled = proxyOn,
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = clashPreferences.proxyScope(ProxyScope.MODEL_PACK_REPO),
+                    title = stringResource(SYMR.strings.pref_proxy_scope_model_pack_repo),
+                    enabled = proxyOn,
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = clashPreferences.proxyScope(ProxyScope.MODEL_PACK_DOWNLOAD),
+                    title = stringResource(SYMR.strings.pref_proxy_scope_model_pack_download),
                     enabled = proxyOn,
                 ),
                 Preference.PreferenceItem.SwitchPreference(

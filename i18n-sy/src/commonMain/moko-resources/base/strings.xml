@@ -938,6 +938,8 @@
     <string name="pref_proxy_scope_manga_upload">Manga upload</string>
     <string name="pref_proxy_scope_extension_repo">Extension repository</string>
     <string name="pref_proxy_scope_extension_download">Extension download &amp; update</string>
+    <string name="pref_proxy_scope_model_pack_repo">Model pack repository</string>
+    <string name="pref_proxy_scope_model_pack_download">Model pack download</string>
     <string name="pref_proxy_scope_sync">Sync service</string>
     <string name="pref_proxy_scope_webdav">WebDAV sync</string>
     <string name="pref_proxy_scope_version_check">Version check</string>

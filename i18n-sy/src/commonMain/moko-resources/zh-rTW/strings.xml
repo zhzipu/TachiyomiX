@@ -129,7 +129,7 @@
     <string name="data_saver_ignore_jpeg">忽略 JPEG 圖片</string>
     <string name="data_saver_ignore_gif">忽略 Gif 動畫</string>
     <string name="data_saver_image_quality">圖片品質</string>
-    <string name="data_saver_image_quality_summary">更高值代表更佳的儲存的圖片品質，但這代表更大的檔案大小，80% 可以很好地平衡圖片品質和檔案大小</string>
+    <string name="data_saver_image_quality_summary">更高值代表更佳的儲存的圖片品質，但這代表更大的檔案大小，80%% 可以很好地平衡圖片品質和檔案大小</string>
     <string name="data_saver_image_format">壓縮為 JPEG</string>
     <string name="data_saver_image_format_summary_on">JPEG 檔案的大小要比 Webp 小得多（代表節省了更多的資料），但它也會使圖片損失更多的品質。\n目前壓縮為 JPEG</string>
     <string name="data_saver_image_format_summary_off">JPEG 檔案的大小要比 Webp 小得多（代表節省了更多的資料），但它也會使圖片損失更多的品質。\n目前壓縮為 Webp</string>
@@ -822,7 +822,9 @@
     <string name="pref_proxy_scope_manga_download">下載漫畫</string>
     <string name="pref_proxy_scope_manga_upload">上傳漫畫</string>
     <string name="pref_proxy_scope_extension_repo">插件倉庫</string>
-    <string name="pref_proxy_scope_extension_download">插件下載更新</string>
+    <string name="pref_proxy_scope_extension_download">外掛下載更新</string>
+    <string name="pref_proxy_scope_model_pack_repo">模型外掛倉庫</string>
+    <string name="pref_proxy_scope_model_pack_download">模型外掛下載</string>
     <string name="pref_proxy_scope_sync">同步服務</string>
     <string name="pref_proxy_scope_webdav">WebDAV 同步</string>
     <string name="pref_proxy_scope_version_check">版本檢測</string>

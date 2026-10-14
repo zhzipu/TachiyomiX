@@ -140,7 +140,7 @@
     <string name="open_debug_menu_summary"><![CDATA[DO NOT TOUCH THIS MENU UNLESS YOU KNOW WHAT YOU ARE DOING! <font color=\'red\'>ЦЕ МОЖЕ ПОШКОДИТИ ВАШУ БІБЛІОТЕКУ!</font>]]></string>
     <string name="data_saver_summary">Стискати зображення перед завантаженням або показуванням у читалці</string>
     <string name="data_saver_ignore_gif">Ігнорувати Gif-анімації</string>
-    <string name="data_saver_image_quality_summary">Вищі значення означають, що зберігається більший відсоток якості зображення, але це також означає, що розмір файлу більший, 80% - це хороший компроміс між розміром файлу та якістю зображення</string>
+    <string name="data_saver_image_quality_summary">Вищі значення означають, що зберігається більший відсоток якості зображення, але це також означає, що розмір файлу більший, 80%% - це хороший компроміс між розміром файлу та якістю зображення</string>
     <string name="data_saver_image_format_summary_off">Розмір файлу Jpeg значно менший, ніж Webp (тобто зберігається більше даних), але при цьому зображення втрачають більшу якість.\nНаразі стискається в Webp</string>
     <string name="toggle_expand_search_filters">Розгорнути всі фільтри пошуку за замовчуванням</string>
     <string name="pref_tracker_resolve_using_source_metadata">Вибирати записи за метаданими джерела</string>

@@ -143,6 +143,27 @@
     <string name="pref_model_packs_installed_summary">ID %1$s · 版本 %2$s · 佔用 %3$s</string>
     <string name="pref_model_packs_install_hint">模型包需自行安裝：取得對應的模型包 APK 後用系統安裝器安裝，返回本頁即可辨識。</string>
     <string name="pref_model_packs_uninstall_failed">無法開啟系統解除安裝畫面</string>
+    <!-- SY: 外掛目錄（遠端模型包倉庫） -->
+    <string name="pref_model_packs_repo">外掛倉庫</string>
+    <string name="pref_model_packs_repo_check">檢查更新</string>
+    <string name="pref_model_packs_repo_never">尚未讀取</string>
+    <string name="pref_model_packs_repo_checking">正在讀取外掛倉庫…</string>
+    <string name="pref_model_packs_repo_updated">共 %1$d 個外掛 · 讀取於 %2$s</string>
+    <string name="pref_model_packs_repo_failed">讀取失敗：%1$s</string>
+    <string name="pref_model_packs_repo_empty">倉庫裡還沒有外掛</string>
+    <string name="pref_model_packs_repo_hint">若一直讀取失敗，可在「設定 → 網路代理 → 作用域」裡調整「模型外掛倉庫」開關。</string>
+    <string name="pref_model_packs_updates">可更新</string>
+    <string name="pref_model_packs_available">可安裝</string>
+    <string name="pref_model_packs_update_summary">已裝 %1$s → 倉庫 %2$s · %3$s</string>
+    <string name="pref_model_packs_available_summary">版本 %1$s · %2$s</string>
+    <string name="pref_model_packs_update_available">有新版本 %1$s（versionCode %2$s）</string>
+    <string name="pref_model_packs_downloading">下載中…</string>
+    <string name="pref_model_packs_size_unknown">大小未知</string>
+    <string name="pref_model_packs_install_started">已下載，等待安裝器安裝</string>
+    <string name="pref_model_packs_error_download">%1$s：下載失敗 — %2$s</string>
+    <string name="pref_model_packs_error_verify">%1$s：校驗失敗 — %2$s</string>
+    <string name="pref_model_packs_install_failed">%1$s：安裝失敗 — %2$s</string>
+    <!-- SY <-->
     <string name="reader_processing_backend">處理後端</string>
     <string name="reader_backend_vulkan">Vulkan GPU</string>
     <string name="reader_backend_qualcomm_npu">Qualcomm NPU</string>

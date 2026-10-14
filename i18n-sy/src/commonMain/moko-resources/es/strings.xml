@@ -129,7 +129,7 @@
     <string name="data_saver_image_quality">Calidad de imagen</string>
     <string name="data_saver_image_format">Comprimir como JPEG</string>
     <string name="data_saver_image_format_summary_on">El tamaño de un archivo JPEG es considerablemente más pequeño que el de WebP (lo que significa que te ahorras datos de descarga), pero también hace que las imágenes pierdan más calidad.\nAhora mismo se comprime utilizando JPEG.</string>
-    <string name="data_saver_image_quality_summary">Al poner un porcentaje mayor aumenta la calidad de la imagen, pero también lo hace el tamaño en disco. Dejarlo en 80% es un término medio entre tamaño aceptable y con calidad.</string>
+    <string name="data_saver_image_quality_summary">Al poner un porcentaje mayor aumenta la calidad de la imagen, pero también lo hace el tamaño en disco. Dejarlo en 80%% es un término medio entre tamaño aceptable y con calidad.</string>
     <string name="data_saver_image_format_summary_off">El tamaño de un archivo JPEG es considerablemente más pequeño que el de WebP (lo que significa que te ahorras datos de descarga), pero también hace que las imágenes pierdan más calidad.\nAhora mismo se comprime utilizando WEBP.</string>
     <string name="data_saver_color_bw">Convertir en Blanco &amp; Negro</string>
     <string name="bandwidth_hero">Bandwidth Hero ( Requiere un servidor proxy )</string>

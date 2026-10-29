@@ -139,3 +139,17 @@ fun <T> compareByInitial(selector: (T) -> String): Comparator<T> {
         { selector(it).lowercase() },
     )
 }
+
+/**
+ * 把条目按首字母分组（'#' 在前，随后 A-Z 升序），同名条目只保留第一个。
+ *
+ * 供「文」排序模式使用：组内已按 [compareByInitial] 排好序，
+ * 组的顺序与 [compareByInitial] 的首字母顺序一致。
+ */
+fun <T> groupByInitial(items: List<T>, nameOf: (T) -> String): List<Pair<Char, List<T>>> {
+    return items
+        .distinctBy(nameOf)
+        .sortedWith(compareByInitial(nameOf))
+        .groupBy { initialOfTitle(nameOf(it)) }
+        .map { (letter, values) -> letter to values }
+}

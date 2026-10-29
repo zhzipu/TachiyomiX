@@ -60,6 +60,7 @@ import tachiyomi.core.common.preference.mapAsCheckboxState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.lang.withUIContext
+import tachiyomi.data.source.NoResultsException
 import tachiyomi.domain.category.interactor.GetCategories
 import tachiyomi.domain.category.interactor.SetMangaCategories
 import tachiyomi.domain.category.model.Category
@@ -86,6 +87,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import xyz.nulldev.ts.api.http.serializer.FilterSerializer
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import eu.kanade.tachiyomi.source.model.Filter as SourceModelFilter
 
 open class BrowseSourceScreenModel(
@@ -255,7 +257,10 @@ open class BrowseSourceScreenModel(
     // Cache of pages prefetched in swipe-to-page mode (key = page number). The current page is
     // always shown alone (vertical scrolling is locked), while the two following pages are
     // fetched ahead of time so swiping to them shows results without waiting for the network.
-    private val swipePageCache = mutableMapOf<Long, List<Pair<Manga, RaisedSearchMetadata?>>>()
+    // ConcurrentHashMap: written from the preload coroutine / paging dispatcher, read from the UI
+    // thread when a swipe is released (see [hasNextSwipePage]).
+    private val swipePageCache: MutableMap<Long, List<Pair<Manga, RaisedSearchMetadata?>>> =
+        ConcurrentHashMap()
 
     // Tracks how many manga items each website page returned, keyed by page number. Sources return
     // a different number of items per page, so a fixed page size can't translate a scroll index back
@@ -281,6 +286,16 @@ open class BrowseSourceScreenModel(
      * spinner that would otherwise flash every time a swipe lands on a preloaded page.
      */
     fun isPageCached(page: Int): Boolean = swipePageCache.containsKey(page.toLong())
+
+    /**
+     * 侧滑翻页模式下，[page] 之后是否还有下一页。
+     *
+     * 图源按页取，拿不到「总页数」，只能以「下一页取到空列表」判定已到末尾：预取
+     * （[preloadSwipePages]）和相邻页的实际加载都会把结果写进 [swipePageCache]，空列表即到底。
+     * 返回 null 表示那一页还没取过（无从判断），调用方应按「有下一页」处理，保持原有行为。
+     */
+    fun hasNextSwipePage(page: Int): Boolean? =
+        swipePageCache[(page + 1).toLong()]?.isNotEmpty()
 
     /**
      * Builds the paging flow for a single [page]. Used for both the current page and, in
@@ -355,6 +370,10 @@ open class BrowseSourceScreenModel(
      * Prefetches the page before and the two pages after [currentPage] into [swipePageCache] so
      * swiping in either direction shows the target page's content immediately. Results already
      * cached are skipped.
+     *
+     * 图源没有下一页时返回的是空结果，被 `BaseSourcePagingSource` 转成 `NoResultsException`
+     * （`LoadResult.Error`），这里把它也记成空列表 —— 这样 [hasNextSwipePage] 才能认出「已到最后一页」。
+     * 其它错误（网络等）不记，保持「未知」以便重试。
      */
     private suspend fun preloadSwipePages(listing: Listing, currentPage: Int) {
         for (target in (currentPage - 1)..(currentPage + SWIPE_PREFETCH_PAGES)) {
@@ -369,8 +388,10 @@ open class BrowseSourceScreenModel(
                     placeholdersEnabled = false,
                 ),
             )
-            if (result is PagingSource.LoadResult.Page) {
-                swipePageCache[key] = result.data
+            when {
+                result is PagingSource.LoadResult.Page -> swipePageCache[key] = result.data
+                result is PagingSource.LoadResult.Error && result.throwable is NoResultsException ->
+                    swipePageCache[key] = emptyList()
             }
         }
     }
@@ -399,6 +420,10 @@ open class BrowseSourceScreenModel(
                     cache[page] = result.data
                     result.copy(nextKey = null)
                 } else {
+                    // 这一页就是空的（没有更多结果）：记成空列表，让 hasNextSwipePage 认出末尾
+                    if (result is LoadResult.Error && result.throwable is NoResultsException) {
+                        cache[page] = emptyList()
+                    }
                     result
                 }
             }

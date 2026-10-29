@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -36,11 +37,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
@@ -54,11 +55,13 @@ import eu.kanade.presentation.browse.components.IndexBarDragTarget
 import eu.kanade.presentation.browse.components.IndexBarEdgeHint
 import eu.kanade.presentation.browse.components.IndexBarEdgeScroller
 import eu.kanade.presentation.browse.components.IndexBarLocateHint
+import eu.kanade.presentation.browse.components.LanguageGroupingPreference
 import eu.kanade.presentation.browse.components.LanguageTagBar
 import eu.kanade.presentation.browse.components.LetterIndexBar
 import eu.kanade.presentation.browse.components.LocalIndexBarBottomBarVisible
 import eu.kanade.presentation.browse.components.NsfwFilter
 import eu.kanade.presentation.browse.util.compareByInitial
+import eu.kanade.presentation.browse.util.groupByInitial
 import eu.kanade.presentation.browse.util.initialOfTitle
 import eu.kanade.presentation.components.LocalTabScrollToTopState
 import eu.kanade.presentation.manga.components.DotSeparatorNoSpaceText
@@ -70,7 +73,6 @@ import eu.kanade.presentation.util.pointerHighlight
 import eu.kanade.tachiyomi.ui.browse.source.SourcesScreenModel
 import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreenModel.Listing
 import eu.kanade.tachiyomi.util.system.LocaleHelper
-import kotlinx.coroutines.launch
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.model.Pin
 import tachiyomi.domain.source.model.Source
@@ -107,7 +109,6 @@ fun SourcesScreen(
     // SY <--
 ) {
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
 
     // SY -->
     // 再次点击顶部当前标签时，列表带动画回到顶部
@@ -162,8 +163,68 @@ fun SourcesScreen(
                 scrollBy = { delta -> listState.scrollBy(delta) },
             )
             // SY <--
+            // SY -->
+            // 「文」勾选＝按语言分组；取消勾选＝按图源名首字母（拼音）分组排列，同名图源只出现一次
+            val groupByLanguage = LanguageGroupingPreference.enabled
+            val initialSort = !groupByLanguage
+            // 点了语言标签但还需要先退出「文」排序时，留到切回语言分组后再定位
+            var pendingLanguage by remember { mutableStateOf<String?>(null) }
+            val initialRows: List<SourceUiModel> = remember(state.items, initialSort) {
+                if (!initialSort) {
+                    emptyList()
+                } else {
+                    val groups = splitSourceGroups(state.items)
+                    // 最近使用 / 已置顶 / 自定义分类：与「文」勾选时一致，保留在最前
+                    val specialGroups = groups.filter { (header, _) ->
+                        header.isCategory ||
+                            header.language == SourcesScreenModel.LAST_USED_KEY ||
+                            header.language == SourcesScreenModel.PINNED_KEY
+                    }
+                    buildList {
+                        specialGroups.forEach { (header, sources) ->
+                            add(header)
+                            addAll(sources)
+                        }
+                        // 字母分组包含全部图源（含上面已出现过的，允许重复出现），只在组内按名字去重
+                        groupByInitial(
+                            items = state.items.filterIsInstance<SourceUiModel.Item>(),
+                            nameOf = { it.source.name },
+                        ).forEach { (letter, sources) ->
+                            add(
+                                SourceUiModel.Header(
+                                    letter.toString(),
+                                    isCategory = true,
+                                    isInitialLetter = true,
+                                ),
+                            )
+                            addAll(sources)
+                        }
+                    }
+                }
+            }
+            // SY <--
             // 索引条滑动期间：隐藏语言分组、按图源名首字母排序、同名图源去重
             val sliding = activeLetter != null
+            // 列表实际展示的行：滑动期间用扁平排序，否则按「文」开关在首字母分组与原分组之间切换
+            val rows = if (initialSort) initialRows else state.items
+            // SY -->
+            // 每行的稳定 key：图源允许重复出现（分组里的 + 字母组里的），用「第几次出现」区分
+            val rowKeys = remember(rows) {
+                val seen = HashMap<String, Int>()
+                rows.map { row ->
+                    when (row) {
+                        is SourceUiModel.Header ->
+                            "header-${row.language}-${row.isCategory}-${row.isInitialLetter}"
+                        is SourceUiModel.Item -> {
+                            val base = "source-${row.source.key()}"
+                            val occurrence = seen[base] ?: 0
+                            seen[base] = occurrence + 1
+                            "$base-$occurrence"
+                        }
+                    }
+                }
+            }
+            // SY <--
             val flatSortedItems = remember(state.items, sliding) {
                 if (!sliding) {
                     emptyList()
@@ -173,15 +234,22 @@ fun SourcesScreen(
                         .sortedWith(compareByInitial { it.source.name })
                 }
             }
-            // 滑动到某个字母时，把列表跳转到该字母的首个条目
+            // 滑动到某个字母时，把列表跳转到该字母的首个条目。
+            // 首字母模式下列表本身就是字母分组，直接跳到对应组标题即可（松手停在原地）
             LaunchedEffect(activeLetter) {
                 val letter = activeLetter ?: return@LaunchedEffect
                 // 进入检索时先记住当前位置（只在本次检索开始时记一次）
-                if (savedIndex < 0) {
+                if (!initialSort && savedIndex < 0) {
                     savedIndex = listState.firstVisibleItemIndex
                     savedOffset = listState.firstVisibleItemScrollOffset
                 }
-                val idx = flatSortedItems.indexOfFirst { initialOfTitle(it.source.name) == letter[0] }
+                val idx = if (initialSort) {
+                    rows.indexOfFirst {
+                        it is SourceUiModel.Header && it.isInitialLetter && it.language == letter
+                    }
+                } else {
+                    flatSortedItems.indexOfFirst { initialOfTitle(it.source.name) == letter[0] }
+                }
                 if (idx >= 0) {
                     listState.scrollToItem(idx)
                 }
@@ -190,6 +258,8 @@ fun SourcesScreen(
             // 没有指向任何图源时不做定位与闪烁，直接回到检索前的位置
             LaunchedEffect(targetNonce, activeLetter) {
                 if (targetNonce == 0 || activeLetter != null) return@LaunchedEffect
+                // 首字母模式：松手不做任何二次定位与回位，停在拖动索引条时到达的位置
+                if (initialSort) return@LaunchedEffect
                 // 等待列表切回原排序并完成一次布局，避免按旧排序的索引错位
                 withFrameNanos { }
                 if (targetSourceId == null) {
@@ -199,11 +269,25 @@ fun SourcesScreen(
                     }
                     return@LaunchedEffect
                 }
-                val idx = state.items.indexOfFirst { it is SourceUiModel.Item && it.source.id == targetSourceId }
+                val idx = rows.indexOfFirst { it is SourceUiModel.Item && it.source.id == targetSourceId }
                 savedIndex = -1
                 if (idx >= 0) {
                     listState.scrollToItem(idx)
                 }
+            }
+            // 点语言标签后定位到该语言的标题：在「文」模式下要等列表切回语言分组
+            LaunchedEffect(pendingLanguage, initialSort) {
+                val lang = pendingLanguage ?: return@LaunchedEffect
+                if (initialSort) return@LaunchedEffect
+                withFrameNanos { }
+                val target = state.items.indexOfFirst {
+                    it is SourceUiModel.Header && it.language == lang && !it.isCategory
+                }
+                if (target != -1) {
+                    listState.animateScrollToItem(target)
+                }
+                // 定位完成再清空，避免中途重组把这次滚动取消掉
+                pendingLanguage = null
             }
             val renderSourceItem: @Composable context(LazyItemScope) (SourceUiModel.Item) -> Unit = { model ->
                 SourceItem(
@@ -244,16 +328,15 @@ fun SourcesScreen(
                         LanguageTagBar(
                             languages = installedLanguages,
                             onLanguageClick = { lang ->
-                                val target = state.items.indexOfFirst {
-                                    it is SourceUiModel.Header && it.language == lang && !it.isCategory
-                                }
-                                if (target != -1) {
-                                    scope.launch { listState.animateScrollToItem(target) }
-                                }
+                                // 语言标签优先：先勾回「文」（按语言分组），等列表切回来后再定位
+                                LanguageGroupingPreference.check()
+                                pendingLanguage = lang
                             },
                             nsfwFilter = nsfwFilter,
                             onNsfwFilterClick = onNsfwFilterClick,
                             onMoveLanguage = onMoveLanguage,
+                            groupByLanguageEnabled = groupByLanguage,
+                            onGroupByLanguageClick = LanguageGroupingPreference::toggle,
                         )
                     }
                 }
@@ -269,7 +352,8 @@ fun SourcesScreen(
                     scrollAtStart = indexBarPosition == LibraryPreferences.IndexBarPosition.RIGHT,
                     hideScrollbar = activeLetter != null,
                 ) {
-                    if (sliding) {
+                    // 首字母模式的列表本身就是字母分组，拖动索引条期间不再切换成扁平排序
+                    if (sliding && !initialSort) {
                         if (flatSortedItems.isNotEmpty()) {
                             items(
                                 items = flatSortedItems,
@@ -280,21 +364,19 @@ fun SourcesScreen(
                             }
                         }
                     } else {
-                        items(
-                            items = state.items,
-                            contentType = {
+                        // SY --> 首字母模式下同一图源可能同时出现在「已置顶/最近使用/分类」和字母组里，
+                        // 所以 key 必须带上「第几次出现」，否则 LazyColumn 会因重复 key 崩溃
+                        itemsIndexed(
+                            items = rows,
+                            contentType = { _, it ->
                                 when (it) {
                                     is SourceUiModel.Header -> "header"
                                     is SourceUiModel.Item -> "item"
                                 }
                             },
-                            key = {
-                                when (it) {
-                                    is SourceUiModel.Header -> it.hashCode()
-                                    is SourceUiModel.Item -> "source-${it.source.key()}"
-                                }
-                            },
-                        ) { model ->
+                            key = { index, _ -> rowKeys.getOrElse(index) { "row-$index" } },
+                        ) { _, model ->
+                        // SY <--
                             when (model) {
                                 is SourceUiModel.Header -> {
                                     SourceHeader(
@@ -325,9 +407,10 @@ fun SourcesScreen(
                     }
                 }
                     // SY -->
-                // 手指还在索引条上滑动时，给列表盖半透明遮罩提示下一步；滑入列表后消失
+                // 手指还在索引条上滑动时，给列表盖半透明遮罩提示下一步；滑入列表后消失。
+                // 首字母模式下拖动索引条直接就跳到对应字母，不需要再滑入列表定位，所以不显示这层提示
                 IndexBarLocateHint(
-                    visible = activeLetter != null && !draggingInList,
+                    visible = activeLetter != null && !draggingInList && !initialSort,
                     text = "手指移到这里，松开即可定位",
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -336,22 +419,33 @@ fun SourcesScreen(
                         modifier = Modifier.fillMaxSize(),
                         position = indexBarAlign,
                         activeLetter = activeLetter,
-                        hintText = "滑向图源松手即可定位",
+                        hintText = if (initialSort) null else "滑向图源松手即可定位",
                         bottomZoneHeight = bottomZoneHeight,
                         onActiveLetterChange = { activeLetter = it },
                         onDragTargetChange = { dragTarget = it },
-                        onDragMoved = { pos ->
-                            highlightSourceId = pos?.let { listState.itemIndexAt(it.y) }
-                                ?.let { flatSortedItems.getOrNull(it)?.source?.id }
+                        onDragMoved = if (initialSort) {
+                            // 首字母模式：列表已按字母分组，不需要手指高亮
+                            null
+                        } else {
+                            { pos: Offset? ->
+                                highlightSourceId = pos?.let { listState.itemIndexAt(it.y) }
+                                    ?.let { flatSortedItems.getOrNull(it)?.source?.id }
+                            }
                         },
                         onDragFinished = { pos ->
-                            val target = pos?.let { listState.itemIndexAt(it.y) }
-                                ?.let { flatSortedItems.getOrNull(it) }
-                            targetSourceId = target?.source?.id
-                            // 定位到的图源保留高亮边框，直到有其它操作
-                            highlightSourceId = target?.source?.id
-                            targetNonce++
-                            target != null
+                            if (initialSort) {
+                                // 首字母模式：松手就停在已经定位到的位置，不再滑入列表二次定位
+                                highlightSourceId = null
+                                true
+                            } else {
+                                val target = pos?.let { listState.itemIndexAt(it.y) }
+                                    ?.let { flatSortedItems.getOrNull(it) }
+                                targetSourceId = target?.source?.id
+                                // 定位到的图源保留高亮边框，直到有其它操作
+                                highlightSourceId = target?.source?.id
+                                targetNonce++
+                                target != null
+                            }
                         },
                     )
                 }
@@ -579,8 +673,31 @@ fun SourceOptionsDialog(
 
 sealed interface SourceUiModel {
     data class Item(val source: Source, val isNsfw: Boolean = false) : SourceUiModel
-    data class Header(val language: String, val isCategory: Boolean) : SourceUiModel
+    data class Header(
+        val language: String,
+        val isCategory: Boolean,
+        // SY --> true 表示「文」未勾选时按首字母生成的字母分组标题（A…#），
+        // 用来和同名自定义分类区分，避免列表 key 冲突、索引条定位错组
+        val isInitialLetter: Boolean = false,
+        // SY <--
+    ) : SourceUiModel
 }
+
+// SY -->
+/** 把 `Header + 紧随其后的条目` 的扁平列表还原成「分组 → 该组条目」 */
+private fun splitSourceGroups(
+    items: List<SourceUiModel>,
+): List<Pair<SourceUiModel.Header, List<SourceUiModel.Item>>> {
+    val groups = mutableListOf<Pair<SourceUiModel.Header, MutableList<SourceUiModel.Item>>>()
+    items.forEach { row ->
+        when (row) {
+            is SourceUiModel.Header -> groups += row to mutableListOf()
+            is SourceUiModel.Item -> groups.lastOrNull()?.second?.add(row)
+        }
+    }
+    return groups.map { (header, sources) -> header to sources.toList() }
+}
+// SY <--
 
 // SY -->
 @Composable

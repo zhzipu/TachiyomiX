@@ -905,6 +905,7 @@
     <string name="browse_page_hint">Page number</string>
     <string name="browse_page_indicator">Page %1$d</string>
     <string name="browse_page_swipe">Swipe to page</string>
+    <string name="browse_last_page">Already at the last page</string>
 
     <!-- Built-in network proxy -->
     <string name="pref_category_proxy">Network proxy</string>

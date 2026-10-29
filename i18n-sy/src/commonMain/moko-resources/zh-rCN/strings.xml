@@ -841,6 +841,7 @@
     <string name="browse_page_hint">页码</string>
     <string name="browse_page_indicator">第 %1$d 页</string>
     <string name="browse_page_swipe">侧滑翻页</string>
+    <string name="browse_last_page">已经是最后一页了</string>
 
     <!-- 内置网络代理 -->
     <string name="pref_category_proxy">网络代理</string>

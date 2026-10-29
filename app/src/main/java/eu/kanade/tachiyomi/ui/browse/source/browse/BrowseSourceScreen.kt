@@ -625,11 +625,18 @@ data class BrowseSourceScreen(
                                                 screenModel.goToPage(targetPage)
                                             }
                                             swipeOffset.value < -threshold -> {
-                                                swipeOffset.animateTo(-screenWidthPx)
-                                                val targetPage = visiblePage + 1
-                                                swipeOffset.snapTo(0f)
-                                                visiblePage = targetPage
-                                                screenModel.goToPage(targetPage)
+                                                // 图源已无下一页（下一页取到空列表）：回弹原位并提示，
+                                                // 不再切到一个空白的页码上
+                                                if (screenModel.hasNextSwipePage(visiblePage) == false) {
+                                                    swipeOffset.animateTo(0f)
+                                                    context.toast(SYMR.strings.browse_last_page)
+                                                } else {
+                                                    swipeOffset.animateTo(-screenWidthPx)
+                                                    val targetPage = visiblePage + 1
+                                                    swipeOffset.snapTo(0f)
+                                                    visiblePage = targetPage
+                                                    screenModel.goToPage(targetPage)
+                                                }
                                             }
                                             else -> swipeOffset.animateTo(0f)
                                         }

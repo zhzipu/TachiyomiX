@@ -42,11 +42,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
@@ -63,11 +63,13 @@ import eu.kanade.presentation.browse.components.IndexBarDragTarget
 import eu.kanade.presentation.browse.components.IndexBarEdgeHint
 import eu.kanade.presentation.browse.components.IndexBarEdgeScroller
 import eu.kanade.presentation.browse.components.IndexBarLocateHint
+import eu.kanade.presentation.browse.components.LanguageGroupingPreference
 import eu.kanade.presentation.browse.components.LanguageTagBar
 import eu.kanade.presentation.browse.components.LetterIndexBar
 import eu.kanade.presentation.browse.components.LocalIndexBarBottomBarVisible
 import eu.kanade.presentation.browse.components.NsfwFilter
 import eu.kanade.presentation.browse.util.compareByInitial
+import eu.kanade.presentation.browse.util.groupByInitial
 import eu.kanade.presentation.browse.util.initialOfTitle
 import eu.kanade.presentation.components.LocalTabScrollToTopState
 import eu.kanade.presentation.components.WarningBanner
@@ -85,7 +87,6 @@ import eu.kanade.tachiyomi.ui.browse.extension.ExtensionUiModel
 import eu.kanade.tachiyomi.ui.browse.extension.ExtensionsScreenModel
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import eu.kanade.tachiyomi.util.system.launchRequestPackageInstallsPermission
-import kotlinx.coroutines.launch
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
@@ -195,7 +196,6 @@ private fun ExtensionContent(
     var trustState by remember { mutableStateOf<Extension.Untrusted?>(null) }
     val installGranted = rememberRequestPackageInstallsPermissionState(initialValue = true)
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
 
     // SY -->
     // 再次点击顶部当前标签时，列表带动画回到顶部
@@ -259,6 +259,42 @@ private fun ExtensionContent(
         }
     }
 
+    // SY -->
+    // 「文」勾选＝按语言分组；取消勾选＝按插件名首字母（拼音）分组排列，同名插件只出现一次。
+    // 「更新待处理」组仍留在最前（带「更新全部」按钮），其中的插件不再重复出现在字母分组里。
+    val groupByLanguage = LanguageGroupingPreference.enabled
+    val initialSort = !groupByLanguage
+    // 点了语言标签但还需要先退出「文」排序时，留到切回语言分组后再定位
+    var pendingLanguage by remember { mutableStateOf<String?>(null) }
+    val initialGroups: Map<ExtensionUiModel.Header, List<ExtensionUiModel.Item>> =
+        remember(state.items, initialSort) {
+            if (!initialSort) {
+                emptyMap()
+            } else {
+                buildMap {
+                    val pendingEntry = state.items.entries.firstOrNull {
+                        (it.key as? ExtensionUiModel.Header.Resource)?.textRes == MR.strings.ext_updates_pending
+                    }
+                    val pending = pendingEntry?.value.orEmpty()
+                    if (pendingEntry != null) {
+                        put(pendingEntry.key, pending)
+                    }
+                    val pendingNames = pending.mapTo(HashSet()) { it.extension.name }
+                    groupByInitial(
+                        items = state.items.asSequence()
+                            .filter { it.key != pendingEntry?.key }
+                            .flatMap { it.value.asSequence() }
+                            .filter { it.extension.name !in pendingNames }
+                            .toList(),
+                        nameOf = { it.extension.name },
+                    ).forEach { (letter, extensions) ->
+                        put(ExtensionUiModel.Header.Text(letter.toString()), extensions)
+                    }
+                }
+            }
+        }
+    // SY <--
+
     Box(modifier = Modifier.fillMaxSize()) {
     Column(
         // 任何操作都清除定位后的高亮边框
@@ -275,24 +311,39 @@ private fun ExtensionContent(
             LanguageTagBar(
                 languages = LocaleHelper.sortLanguages(state.enabledLanguages, state.languageOrder),
                 onLanguageClick = { lang ->
-                    val target = if (lang == "all") {
-                        firstContentIndex
-                    } else {
-                        languageHeaderIndices[LocaleHelper.getSourceDisplayName(lang, context)]
-                    }
-                    if (target != null) {
-                        scope.launch { listState.animateScrollToItem(target) }
-                    }
+                    // 语言标签优先：先勾回「文」（按语言分组），等列表切回来后再定位
+                    LanguageGroupingPreference.check()
+                    pendingLanguage = lang
                 },
                 nsfwFilter = nsfwFilter,
                 onNsfwFilterClick = onNsfwFilterClick,
                 onMoveLanguage = onMoveLanguage,
+                groupByLanguageEnabled = groupByLanguage,
+                onGroupByLanguageClick = LanguageGroupingPreference::toggle,
             )
             }
         }
 
         // 索引条滑动期间：隐藏语言分组、按插件名首字母排序、同名多语言插件去重
         val sliding = activeLetter != null
+        // 列表实际展示的分组：按「文」开关在首字母分组与原分组之间切换
+        val groups = if (initialSort) initialGroups else state.items
+        // 点语言标签后定位到该语言的标题：在「文」模式下要等列表切回语言分组
+        LaunchedEffect(pendingLanguage, initialSort) {
+            val lang = pendingLanguage ?: return@LaunchedEffect
+            if (initialSort) return@LaunchedEffect
+            withFrameNanos { }
+            val target = if (lang == "all") {
+                firstContentIndex
+            } else {
+                languageHeaderIndices[LocaleHelper.getSourceDisplayName(lang, context)]
+            }
+            if (target != null) {
+                listState.animateScrollToItem(target)
+            }
+            // 定位完成再清空，避免中途重组把这次滚动取消掉
+            pendingLanguage = null
+        }
         val flatSortedItems = remember(state.items, sliding) {
             if (!sliding) {
                 emptyList()
@@ -303,23 +354,40 @@ private fun ExtensionContent(
                     .sortedWith(compareByInitial { it.extension.name })
             }
         }
-        // 滑动到某个字母时，把列表跳转到该字母的首个条目
+        // 滑动到某个字母时，把列表跳转到该字母的首个条目。
+        // 首字母模式下列表本身就是字母分组，直接跳到对应组标题即可（松手停在原地）
         LaunchedEffect(activeLetter) {
             val letter = activeLetter ?: return@LaunchedEffect
             // 进入检索时先记住当前位置（只在本次检索开始时记一次）
-            if (savedIndex < 0) {
+            if (!initialSort && savedIndex < 0) {
                 savedIndex = listState.firstVisibleItemIndex
                 savedOffset = listState.firstVisibleItemScrollOffset
             }
-            val idx = flatSortedItems.indexOfFirst { initialOfTitle(it.extension.name) == letter[0] }
-            if (idx >= 0) {
-                listState.scrollToItem(firstContentIndex + idx)
+            val target = if (initialSort) {
+                var found = -1
+                var running = firstContentIndex
+                for ((header, items) in groups) {
+                    if (header is ExtensionUiModel.Header.Text && header.text == letter) {
+                        found = running
+                        break
+                    }
+                    running += 1 + items.size
+                }
+                found
+            } else {
+                val idx = flatSortedItems.indexOfFirst { initialOfTitle(it.extension.name) == letter[0] }
+                if (idx >= 0) firstContentIndex + idx else -1
+            }
+            if (target >= 0) {
+                listState.scrollToItem(target)
             }
         }
         // 松手后：恢复分组布局并把列表滚动到手指松开时选中的插件；
         // 没有指向任何插件时不做定位与闪烁，直接回到检索前的位置
         LaunchedEffect(targetNonce, activeLetter) {
             if (targetNonce == 0 || activeLetter != null) return@LaunchedEffect
+            // 首字母模式：松手不做任何二次定位与回位，停在拖动索引条时到达的位置
+            if (initialSort) return@LaunchedEffect
             // 等待列表切回原分组布局并完成一次布局，避免按旧排序的索引错位
             withFrameNanos { }
             if (targetPkgName == null) {
@@ -331,7 +399,7 @@ private fun ExtensionContent(
             }
             var target = -1
             var running = firstContentIndex
-            for ((_, items) in state.items) {
+            for ((_, items) in groups) {
                 val i = items.indexOfFirst { it.extension.pkgName == targetPkgName }
                 if (i >= 0) {
                     target = running + 1 + i
@@ -407,7 +475,8 @@ private fun ExtensionContent(
                     }
                 }
 
-                if (sliding) {
+                // 首字母模式的列表本身就是字母分组，拖动索引条期间不再切换成扁平排序
+                if (sliding && !initialSort) {
                     if (flatSortedItems.isNotEmpty()) {
                         items(
                             items = flatSortedItems,
@@ -418,7 +487,7 @@ private fun ExtensionContent(
                         }
                     }
                 } else {
-                    state.items.forEach { (header, items) ->
+                    groups.forEach { (header, items) ->
                         item(
                             contentType = "header",
                             key = "extensionHeader-${header.hashCode()}",
@@ -472,9 +541,10 @@ private fun ExtensionContent(
                 }
             }
             // SY -->
-            // 手指还在索引条上滑动时，给列表盖半透明遮罩提示下一步；滑入列表后消失
+            // 手指还在索引条上滑动时，给列表盖半透明遮罩提示下一步；滑入列表后消失。
+            // 首字母模式下拖动索引条直接就跳到对应字母，不需要再滑入列表定位，所以不显示这层提示
             IndexBarLocateHint(
-                visible = activeLetter != null && !draggingInList,
+                visible = activeLetter != null && !draggingInList && !initialSort,
                 text = "手指移到这里，松开即可定位",
                 modifier = Modifier.fillMaxSize(),
             )
@@ -483,22 +553,33 @@ private fun ExtensionContent(
                     modifier = Modifier.fillMaxSize(),
                     position = indexBarAlign,
                     activeLetter = activeLetter,
-                    hintText = "滑向插件松手即可定位",
+                    hintText = if (initialSort) null else "滑向插件松手即可定位",
                     bottomZoneHeight = bottomZoneHeight,
                     onActiveLetterChange = { activeLetter = it },
                     onDragTargetChange = { dragTarget = it },
-                    onDragMoved = { pos ->
-                        highlightPkgName = pos?.let { listState.itemIndexAt(it.y) }
-                            ?.let { flatSortedItems.getOrNull(it - firstContentIndex)?.extension?.pkgName }
+                    onDragMoved = if (initialSort) {
+                        // 首字母模式：列表已按字母分组，不需要手指高亮
+                        null
+                    } else {
+                        { pos: Offset? ->
+                            highlightPkgName = pos?.let { listState.itemIndexAt(it.y) }
+                                ?.let { flatSortedItems.getOrNull(it - firstContentIndex)?.extension?.pkgName }
+                        }
                     },
                     onDragFinished = { pos ->
-                        val target = pos?.let { listState.itemIndexAt(it.y) }
-                            ?.let { flatSortedItems.getOrNull(it - firstContentIndex) }
-                        targetPkgName = target?.extension?.pkgName
-                        // 定位到的插件保留高亮边框，直到有其它操作
-                        highlightPkgName = target?.extension?.pkgName
-                        targetNonce++
-                        target != null
+                        if (initialSort) {
+                            // 首字母模式：松手就停在已经定位到的位置，不再滑入列表二次定位
+                            highlightPkgName = null
+                            true
+                        } else {
+                            val target = pos?.let { listState.itemIndexAt(it.y) }
+                                ?.let { flatSortedItems.getOrNull(it - firstContentIndex) }
+                            targetPkgName = target?.extension?.pkgName
+                            // 定位到的插件保留高亮边框，直到有其它操作
+                            highlightPkgName = target?.extension?.pkgName
+                            targetNonce++
+                            target != null
+                        }
                     },
                 )
             }

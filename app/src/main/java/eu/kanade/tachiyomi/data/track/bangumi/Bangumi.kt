@@ -137,6 +137,10 @@ class Bangumi(id: Long) : BaseTracker(id, "Bangumi") {
         interceptor.newAuth(null)
     }
 
+    // KMK -->
+    override fun hasNotStartedReading(status: Long): Boolean = status == PLAN_TO_READ
+    // KMK <--
+
     companion object {
         const val PLAN_TO_READ = 1L
         const val COMPLETED = 2L

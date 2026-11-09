@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 素材已在 432×432 画布上按 88/108 排好版、四周做了边缘延展：
+         直接铺满，交给系统遮罩去裁，图标自带的边框就不会露出来 -->
+    <background android:drawable="@drawable/disguise_note_1" />
+    <foreground android:drawable="@android:color/transparent" />
+</adaptive-icon>

@@ -54,8 +54,8 @@ android {
     defaultConfig {
         applicationId = "com.tachiyomi.x"
 
-        versionCode = 105
-        versionName = "1.0.5"
+        versionCode = 106
+        versionName = "1.0.6"
 
         buildConfigField("String", "UPSTREAM_VERSION", """"0.20.1"""")
 
@@ -79,9 +79,37 @@ android {
         }
     }
 
+    // 正式版签名：优先用 local.properties 里配置的专用 release 密钥（不入库、可异地备份），
+    // 未配置时回落到 Gradle 默认 debug 签名（历史行为）。
+    // 不要再把正式包绑在 debug.keystore 上：那是 SDK 随机生成的一次性密钥，重装系统/换机即失联。
+    val releaseStorePath = localProperties.getProperty("release.keystore")
+    val releaseStorePassword = localProperties.getProperty("release.keystore.password")
+    val releaseKeyAlias = localProperties.getProperty("release.key.alias")
+    val releaseKeyPassword = localProperties.getProperty("release.key.password")
+        ?: releaseStorePassword
+    val hasReleaseSigning = !releaseStorePath.isNullOrBlank() &&
+        !releaseStorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        rootProject.file(releaseStorePath).exists()
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseStorePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         named("release") {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             isProfileable = true

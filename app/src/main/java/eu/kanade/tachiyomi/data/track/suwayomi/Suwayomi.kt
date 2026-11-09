@@ -108,4 +108,8 @@ class Suwayomi(id: Long) : BaseTracker(id, "Suwayomi"), EnhancedTracker {
         val preferences = api.sourcePreferences()
         return preferences.getBoolean(TRACKER_DELETE_KEY, TRACKER_DELETE_DEFAULT)
     }
+
+    // KMK -->
+    override fun hasNotStartedReading(status: Long): Boolean = status == UNREAD
+    // KMK <--
 }

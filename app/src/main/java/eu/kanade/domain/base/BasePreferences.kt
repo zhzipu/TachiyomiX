@@ -33,6 +33,8 @@ class BasePreferences(
         PRIVATE(MR.strings.ext_installer_private, false),
         // SY --> 交给外部安装器 InstallerX Revived（com.rosan.installer.x.revived）处理
         INSTALLERX(MR.strings.ext_installer_installerx, false),
+        // 有 root 时用 `su -c pm install` 静默安装，不弹任何系统界面
+        ROOT(MR.strings.ext_installer_root, false),
         // SY <--
     }
 

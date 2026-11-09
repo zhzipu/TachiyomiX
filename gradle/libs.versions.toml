@@ -37,7 +37,11 @@ directionalViewPager = "1.0.0"
 diskLruCache = "2.0.2"
 firebase-bom = "34.15.0"
 firebase-crashlytics = "3.0.7"
-flexibleAdapter = "c8013533"
+# 原本是 jitpack 上的 com.github.arkon.FlexibleAdapter:c8013533，但 jitpack 对该 commit
+# 的构建已永久失败（构建脚本依赖的 nu.studer:java-ordered-properties:1.0.1 随 JCenter 下线），
+# 产物不可再下载。该 commit 只是官方 5.1.0 之上「Fix missing Lifecycle dependency」的构建修正，
+# 代码与 5.1.0 一致，故改用 Maven Central 的正式版。
+flexibleAdapter = "5.1.0"
 google-services = "4.5.0"
 image-decoder = "e03b81e18a"
 injekt = "ee267b2e27"
@@ -128,7 +132,7 @@ diskLruCache = { module = "com.jakewharton:disklrucache", version.ref = "diskLru
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
-flexibleAdapter = { module = "com.github.arkon.FlexibleAdapter:flexible-adapter", version.ref = "flexibleAdapter" }
+flexibleAdapter = { module = "eu.davidea:flexible-adapter", version.ref = "flexibleAdapter" }
 image-decoder = { module = "com.github.mihonapp:image-decoder", version.ref = "image-decoder" }
 injekt = { module = "com.github.null2264:injekt-koin", version.ref = "injekt" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }

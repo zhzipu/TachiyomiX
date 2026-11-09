@@ -185,15 +185,28 @@ class ExtensionsScreenModel(
     }
     // SY <--
 
+    // SY --> 一键更新：下载并发（每个插件一个协程），安装串行由 ExtensionInstaller 的安装队列保证
     fun updateAllExtensions() {
         screenModelScope.launchIO {
-            state.value.items.values.flatten()
+            // 正在下载/安装中的就别再排一遍（Error 的允许重试）
+            val inFlight = currentDownloads.value
+                .filterValues { !it.isCompleted() }
+                .keys
+
+            state.value.items.values
+                .flatten()
                 .map { it.extension }
                 .filterIsInstance<Extension.Installed>()
                 .filter { it.hasUpdate }
-                .forEach(::updateExtension)
+                .filterNot { it.pkgName in inFlight }
+                .forEach { extension ->
+                    launch {
+                        extensionManager.updateExtension(extension).collectToInstallUpdate(extension)
+                    }
+                }
         }
     }
+    // SY <--
 
     fun installExtension(extension: Extension.Available) {
         screenModelScope.launchIO {

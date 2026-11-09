@@ -169,4 +169,8 @@ class Hikka(id: Long) : BaseTracker(id, "Hikka"), DeletableTracker {
             null
         }
     }
+
+    // KMK -->
+    override fun hasNotStartedReading(status: Long): Boolean = status == PLAN_TO_READ
+    // KMK <--
 }

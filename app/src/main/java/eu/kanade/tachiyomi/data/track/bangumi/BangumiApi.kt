@@ -196,8 +196,10 @@ class BangumiApi(
     }
 
     companion object {
-        private const val CLIENT_ID = "bgm291665acbd06a4c28"
-        private const val CLIENT_SECRET = "43e5ce36b207de16e5d3cfd3e79118db"
+        // 本项目自己在 bgm.tv 注册的 OAuth 应用（不是 Mihon 那个）。
+        // 回调地址必须与 bgm.tv 应用设置里的「回调地址」完全一致，即 REDIRECT_URL。
+        private const val CLIENT_ID = "bgm75126af07f683795f"
+        private const val CLIENT_SECRET = "46b5986e0f5dba367a9c2b26e5210dc9"
 
         private const val API_URL = "https://api.bgm.tv"
         private const val OAUTH_URL = "https://bgm.tv/oauth/access_token"

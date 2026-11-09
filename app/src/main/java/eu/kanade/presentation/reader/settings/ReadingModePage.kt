@@ -156,11 +156,6 @@ private fun ColumnScope.PagerViewerSettings(screenModel: ReaderSettingsScreenMod
     )
 
     CheckboxItem(
-        label = stringResource(MR.strings.pref_landscape_zoom),
-        pref = screenModel.preferences.landscapeZoom,
-    )
-
-    CheckboxItem(
         label = stringResource(MR.strings.pref_navigate_pan),
         pref = screenModel.preferences.navigateToPan,
     )

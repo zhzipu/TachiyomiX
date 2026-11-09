@@ -225,7 +225,6 @@ object SettingsReaderScreen : SearchableSettings {
         val context = LocalContext.current
 
         val navMode by navModePref.collectAsState()
-        val imageScaleType by imageScaleTypePref.collectAsState()
         val dualPageSplit by dualPageSplitPref.collectAsState()
         val rotateToFit by rotateToFitPref.collectAsState()
         val customNav by customNavPref.collectAsState()
@@ -289,11 +288,6 @@ object SettingsReaderScreen : SearchableSettings {
                     title = stringResource(MR.strings.pref_page_transitions),
                 ),
                 // SY <--
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = readerPreferences.landscapeZoom,
-                    title = stringResource(MR.strings.pref_landscape_zoom),
-                    enabled = imageScaleType == 1,
-                ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = readerPreferences.navigateToPan,
                     title = stringResource(MR.strings.pref_navigate_pan),

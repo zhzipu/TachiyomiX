@@ -6,6 +6,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.tachiyomi.extension.installer.RootInstaller
 import eu.kanade.tachiyomi.extension.util.ExtensionInstallActivity
 import eu.kanade.tachiyomi.extension.util.ExtensionInstaller
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -64,7 +65,8 @@ internal class ModelPackInstaller(private val context: Context) {
         try {
             val apk = downloadApk(pack)
             verify(pack, apk)
-            withContext(Dispatchers.Main) { launchInstaller(pack, apk) }
+            // root 静默安装是阻塞执行，放在 IO 上；其余安装方式内部会切回主线程启动界面
+            withContext(Dispatchers.IO) { launchInstaller(pack, apk) }
             log(pack, "OK 已交给安装器，用时 ${System.currentTimeMillis() - startedAt}ms")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -195,30 +197,48 @@ internal class ModelPackInstaller(private val context: Context) {
         context.packageManager.getPackageArchiveInfo(apk.absolutePath, 0)
     }
 
-    private fun launchInstaller(pack: CatalogModelPack, apk: File) {
+    private suspend fun launchInstaller(pack: CatalogModelPack, apk: File) {
         val installer = installerPreference.get()
-        try {
-            val intent = Intent(context, ExtensionInstallActivity::class.java)
-                .setDataAndType(apk.getUriCompat(context), ExtensionInstaller.APK_MIME)
-                .putExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, apk.name.hashCode().toLong())
-                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-            // 与扩展一致：用户在「安装程序」里选了 InstallerX 时直接指定目标，不再让系统弹选择框
-            if (installer == BasePreferences.ExtensionInstaller.INSTALLERX) {
-                intent.putExtra(
-                    ExtensionInstaller.EXTRA_TARGET_PACKAGE,
-                    context.installerXPackageName ?: INSTALLERX_PACKAGE_NAME,
+        // SY --> 选了 root 就静默装，不弹任何系统界面，装完直接给结论
+        if (installer == BasePreferences.ExtensionInstaller.ROOT) {
+            val result = RootInstaller.install(apk, pack.id)
+            if (!result.success) {
+                throw ModelPackInstallException(
+                    ModelPackInstallException.Stage.INSTALL,
+                    result.message,
                 )
             }
+            apk.delete()
+            log(pack, "root install ok")
+            return
+        }
+        // SY <--
 
-            context.startActivity(intent)
-            log(pack, "installer launched preference=$installer")
-        } catch (e: Exception) {
-            throw ModelPackInstallException(
-                ModelPackInstallException.Stage.INSTALL,
-                e.message ?: e::class.java.simpleName,
-                e,
-            )
+        withContext(Dispatchers.Main) {
+            try {
+                val intent = Intent(context, ExtensionInstallActivity::class.java)
+                    .setDataAndType(apk.getUriCompat(context), ExtensionInstaller.APK_MIME)
+                    .putExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, apk.name.hashCode().toLong())
+                    .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+                // 与扩展一致：用户在「安装程序」里选了 InstallerX 时直接指定目标，不再让系统弹选择框
+                if (installer == BasePreferences.ExtensionInstaller.INSTALLERX) {
+                    intent.putExtra(
+                        ExtensionInstaller.EXTRA_TARGET_PACKAGE,
+                        context.installerXPackageName ?: INSTALLERX_PACKAGE_NAME,
+                    )
+                }
+
+                context.startActivity(intent)
+                log(pack, "installer launched preference=$installer")
+            } catch (e: Exception) {
+                throw ModelPackInstallException(
+                    ModelPackInstallException.Stage.INSTALL,
+                    e.message ?: e::class.java.simpleName,
+                    e,
+                )
+            }
         }
     }
 

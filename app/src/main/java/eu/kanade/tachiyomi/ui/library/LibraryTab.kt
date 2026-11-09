@@ -120,7 +120,7 @@ data object LibraryTab : Tab {
         val snackbarHostState = remember { SnackbarHostState() }
 
         // SY -->
-        // 「下载」分类顶栏左上角的「继续 / 暂停」。
+        // 「下载」分类顶栏标题右侧的「继续 / 暂停」。
         //
         // 按钮必须画在顶栏里，而「现在是不是『下载』分类」只有 `LibraryContent`
         // 知道（它拿着 pagerState），所以这个值由那边回传上来。
@@ -206,9 +206,9 @@ data object LibraryTab : Tab {
                     // SY -->
                     onClickSyncExh = screenModel::openFavoritesSyncDialog.takeIf { state.showSyncExh },
                     isSyncEnabled = state.isSyncEnabled,
-                    // 「下载」分类里，左上角放「继续 / 暂停」两个图标按钮。
-                    // 其余分类传 null，左上角保持空白（书架是顶层页签，本来就没有返回箭头）。
-                    navigationContent = if (showDownloadControls) {
+                    // 「下载」分类里，把「继续 / 暂停」两个图标按钮贴在标题「书架」右侧。
+                    // 其余分类传 null，标题后面保持空白。
+                    titleTrailingContent = if (showDownloadControls) {
                         {
                             LibraryDownloadControls(
                                 onContinue = {
@@ -337,7 +337,7 @@ data object LibraryTab : Tab {
                         // SY -->
                         // 书架「下载」分类的进度条数据（其它分类不会用到）
                         getMangaProgress = { state.progressFor(it) },
-                        // 「继续 / 暂停」按钮画在顶栏（见上面的 navigationContent），
+                        // 「继续 / 暂停」按钮画在顶栏标题右侧（见上面的 titleTrailingContent），
                         // 这里只开关 + 回传「当前页是不是『下载』分类」
                         showDownloadControls = true,
                         onDownloadControlsVisibleChange = { showDownloadControls = it },

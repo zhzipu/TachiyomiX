@@ -43,10 +43,10 @@ fun LibraryToolbar(
     onClickSyncExh: (() -> Unit)?,
     isSyncEnabled: Boolean,
     /**
-     * 左上角的自定义内容。「下载」分类里放「继续 / 暂停」两个图标按钮，
-     * 其余分类传 null（不占位置）。多选态下不显示 —— 那时左上角是「退出多选」。
+     * 标题右侧的自定义内容。「下载」分类里放「继续 / 暂停」两个图标按钮，
+     * 其余分类传 null（不占位置）。多选态 / 搜索态下不显示 —— 那时标题整体被替换掉了。
      */
-    navigationContent: @Composable (() -> Unit)? = null,
+    titleTrailingContent: @Composable (() -> Unit)? = null,
     // SY <--
     searchQuery: String?,
     onSearchQueryChange: (String?) -> Unit,
@@ -71,7 +71,7 @@ fun LibraryToolbar(
         // SY -->
         onClickSyncExh = onClickSyncExh,
         isSyncEnabled = isSyncEnabled,
-        navigationContent = navigationContent,
+        titleTrailingContent = titleTrailingContent,
         // SY <--
         scrollBehavior = scrollBehavior,
     )
@@ -91,7 +91,8 @@ private fun LibraryRegularToolbar(
     // SY -->
     onClickSyncExh: (() -> Unit)?,
     isSyncEnabled: Boolean,
-    navigationContent: @Composable (() -> Unit)?,
+    /** 标题右侧的自定义内容（「下载」分类的「继续 / 暂停」）。 */
+    titleTrailingContent: @Composable (() -> Unit)?,
     // SY <--
     scrollBehavior: TopAppBarScrollBehavior?,
 ) {
@@ -105,20 +106,24 @@ private fun LibraryRegularToolbar(
                     modifier = Modifier.weight(1f, false),
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (title.numberOfManga != null) {
+                // 标题右侧有「继续 / 暂停」时不再画数量气泡：顶栏横向空间一共就
+                // 「标题 + 气泡 + 两个 48dp 按钮」那么点，三者挤在一起会把「书架」压成
+                // 「书…」。气泡显示的是整个书架的数量（不是本分类的），信息量最低，
+                // 所以让它先让位。
+                if (title.numberOfManga != null && titleTrailingContent == null) {
                     Pill(
                         text = "${title.numberOfManga}",
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = pillAlpha),
                         fontSize = 14.sp,
                     )
                 }
+                // SY --> 「继续 / 暂停」贴在标题右侧，而不是顶栏最左边的导航位
+                titleTrailingContent?.invoke()
+                // SY <--
             }
         },
         searchQuery = searchQuery,
         onChangeSearchQuery = onSearchQueryChange,
-        // SY -->
-        navigationContent = navigationContent,
-        // SY <--
         actions = {
             val filterTint = if (hasFilters) MaterialTheme.colorScheme.active else LocalContentColor.current
             AppBarActions(

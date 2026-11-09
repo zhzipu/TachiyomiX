@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -83,7 +84,7 @@ fun LibraryContent(
     // 取某本漫画的下载/上传进度（「下载」分类的进度条用）
     getMangaProgress: (LibraryItem) -> LibraryMangaProgress = { LibraryMangaProgress.EMPTY },
     /**
-     * 「下载」分类里左上角要不要放「继续 / 暂停」两个按钮。
+     * 「下载」分类里，标题「书架」右侧要不要放「继续 / 暂停」两个按钮。
      *
      * 只是**开关**：按钮和弹窗都画在 `LibraryTab` 的顶栏里（见
      * [onDownloadControlsVisibleChange]），本组件不渲染它们。
@@ -92,9 +93,9 @@ fun LibraryContent(
     /**
      * 告诉调用方「当前这一页是不是『下载』分类、并且不在多选」。
      *
-     * 「继续 / 暂停」按钮要画在顶栏左上角，而顶栏在另一棵组合树里，
+     * 「继续 / 暂停」按钮要画在顶栏标题右侧，而顶栏在另一棵组合树里，
      * 只有这里知道 `pagerState`（用户滑到了哪个分类）。所以用这个回调把结论送出去，
-     * 由 `LibraryTab` 决定要不要在顶栏放那两个按钮。
+     * 由 `LibraryTab` 决定要不要在标题右侧放那两个按钮。
      */
     onDownloadControlsVisibleChange: ((Boolean) -> Unit)? = null,
     // SY <--
@@ -118,7 +119,7 @@ fun LibraryContent(
     val indexBarBridge = remember { LibraryIndexBarBridge() }
     // 手指当前所在区域（滑入列表后才有值），用于显示上下边缘遮罩
     var dragTarget by remember { mutableStateOf<IndexBarDragTarget?>(null) }
-    // 「下载」分类里，顶栏左上角那两个控制按钮要不要显示（由分类页 + 是否多选决定）
+    // 「下载」分类里，顶栏标题右侧那两个控制按钮要不要显示（由分类页 + 是否多选决定）
     var showContinueAllButton by remember { mutableStateOf(false) }
     // 分类栏高度，用于让顶部遮罩正好覆盖分类栏
     var tabsHeightPx by remember { mutableStateOf(0) }
@@ -302,7 +303,7 @@ fun LibraryContent(
 
             // SY -->
             // 「继续 / 暂停」按钮只属于「下载」分类这一页；跟着当前页走，滑到别的分类自动消失。
-            // 也要避开多选状态：那时顶栏左上角是「退出多选」。
+            // 也要避开多选状态：那时顶栏整个换成多选工具条。
             val currentCategory = categories.getOrNull(pagerState.currentPage)
             showContinueAllButton = showDownloadControls &&
                 selection.isEmpty() &&
@@ -333,11 +334,11 @@ fun LibraryContent(
             )
         }
 
-        // 「继续 / 暂停」按钮现在画在顶栏左上角（需求 2 / 3），按钮本身和弹窗都在
+        // 「继续 / 暂停」按钮现在画在顶栏标题右侧，按钮本身和弹窗都在
         // `LibraryTab` 里 —— 因为顶栏不在本组件内，只有这里知道用户滑到了哪一页。
         // 所以这里只把「当前页是不是『下载』分类」这个结论送出去。
         //
-        // 多选态下也不显示：底栏展开时是操作区，而且那时顶栏左上角是「退出多选」。
+        // 多选态下也不显示：底栏展开时是操作区，而且那时顶栏整个换成多选工具条。
         LaunchedEffect(showContinueAllButton, onDownloadControlsVisibleChange) {
             onDownloadControlsVisibleChange?.invoke(showContinueAllButton)
         }
@@ -398,10 +399,10 @@ fun ContinueAllActionRow(
 }
 
 /**
- * 顶栏左上角的「继续 / 暂停」两个图标按钮。
+ * 顶栏标题「书架」右侧的「继续 / 暂停」两个图标按钮。
  *
- * 放在左上角而不是右下角悬浮（需求 2 / 3）：右下角原本的悬浮按钮会挡住列表，
- * 而且和索引条、多选底栏抢位置；顶栏左上角在「下载」分类之外都是空的，最合适。
+ * 放在标题右侧而不是右下角悬浮：右下角原本的悬浮按钮会挡住列表，
+ * 而且和索引条、多选底栏抢位置；标题右侧在「下载」分类之外都是空的，最合适。
  *
  * [onPause] 为 null 时只画「继续」。
  */
@@ -410,15 +411,23 @@ fun LibraryDownloadControls(
     onContinue: () -> Unit,
     onPause: (() -> Unit)?,
 ) {
+    // 40dp 的按钮盒（默认是 48dp）：顶栏标题槽只有 ~150dp，两个 48dp 按钮会把
+    // 「书架」挤到只剩一个字的宽度（实测 42dp < 需要的 44dp，渲染成「书…」）。
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onContinue) {
+        IconButton(
+            onClick = onContinue,
+            modifier = Modifier.size(40.dp),
+        ) {
             Icon(
                 imageVector = Icons.Filled.PlayArrow,
                 contentDescription = stringResource(SYMR.strings.download_continue_all),
             )
         }
         if (onPause != null) {
-            IconButton(onClick = onPause) {
+            IconButton(
+                onClick = onPause,
+                modifier = Modifier.size(40.dp),
+            ) {
                 Icon(
                     imageVector = Icons.Outlined.Pause,
                     contentDescription = stringResource(SYMR.strings.action_pause_all),

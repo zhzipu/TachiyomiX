@@ -52,6 +52,12 @@ google-services.json
 /sy_sync.proto
 /sy_sync.proto.gz
 
+# ncnn 模型调试残留（根目录下的临时转换产物）
+/debug*.bin
+/debug*.param
+# 工具生成的临时文件
+/.workbuddy-tmp-*
+
 # 临时图片
 /screenshot.png
 /screen.png

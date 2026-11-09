@@ -176,6 +176,10 @@ class MangaBaka(id: Long) : BaseTracker(id, "MangaBaka"), DeletableTracker {
         api.deleteLibManga(track)
     }
 
+    // KMK -->
+    override fun hasNotStartedReading(status: Long): Boolean = status == PLAN_TO_READ
+    // KMK <--
+
     companion object {
         const val READING = 1L
         const val COMPLETED = 2L

@@ -94,6 +94,14 @@ class ReaderPreferences(
 
     val imageScaleType: Preference<Int> = preferenceStore.getInt("pref_image_scale_type_key", 1)
 
+    init {
+        // 「智能填充」(旧值 6) 已移除：老配置归到「适应屏幕」(1)。
+        // 两者在渲染上本来就等价，这里只是让设置页别出现「一个都没选中」。
+        if (imageScaleType.get() > 5) {
+            imageScaleType.set(1)
+        }
+    }
+
     val zoomStart: Preference<Int> = preferenceStore.getInt("pref_zoom_start_key", 1)
 
     val readerTheme: Preference<Int> = preferenceStore.getInt("pref_reader_theme_key", 1)
@@ -106,8 +114,6 @@ class ReaderPreferences(
     val cropBorders: Preference<Boolean> = preferenceStore.getBoolean("crop_borders", false)
 
     val navigateToPan: Preference<Boolean> = preferenceStore.getBoolean("navigate_pan", true)
-
-    val landscapeZoom: Preference<Boolean> = preferenceStore.getBoolean("landscape_zoom", true)
 
     val cropBordersWebtoon: Preference<Boolean> = preferenceStore.getBoolean("crop_borders_webtoon", false)
 
@@ -363,7 +369,8 @@ class ReaderPreferences(
             MR.strings.scale_type_fit_width,
             MR.strings.scale_type_fit_height,
             MR.strings.scale_type_original_size,
-            MR.strings.scale_type_smart_fit,
+            // 「智能填充」已移除：它与「适应屏幕」数学等价（见 ReaderPageImageView.Config.effectiveScaleType），
+            // 留着只会让用户以为多了一个选择。旧值 6 由 init 里的迁移归到 1。
         )
 
         val ZoomStart = listOf(

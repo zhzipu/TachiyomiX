@@ -143,6 +143,13 @@ object SettingsTrackingScreen : SearchableSettings {
                 subtitle = stringResource(SYMR.strings.pref_tracker_resolve_using_source_metadata_summary),
             ),
             // SY <--
+            // KMK -->
+            Preference.PreferenceItem.SwitchPreference(
+                preference = trackPreferences.autoSyncProgressFromTrackers,
+                title = stringResource(MR.strings.pref_auto_sync_progress_from_trackers),
+                subtitle = stringResource(MR.strings.pref_auto_sync_progress_from_trackers_summary),
+            ),
+            // KMK <--
             Preference.PreferenceGroup(
                 title = stringResource(MR.strings.services),
                 preferenceItems = listOf(

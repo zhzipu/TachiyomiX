@@ -144,11 +144,14 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- 旧版入口（每种身份只有一套图标）：只为升级过渡保留，界面不再展示。
+             老用户的值会被迁移到该身份的第 1 套，App 启动时由 LauncherDisguise.apply 关掉这些旧别名，
+             这样升级后桌面图标不会因为旧组件消失而短暂丢失。 -->
         <activity-alias
             android:name=".LauncherFakeCalc"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_calc"
+            android:icon="@mipmap/ic_launcher_calc_1"
             android:label="@string/fake_app_name_calc"
             android:targetActivity=".ui.main.MainActivity">
             <intent-filter>
@@ -162,7 +165,7 @@
             android:name=".LauncherFakeNote"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_note"
+            android:icon="@mipmap/ic_launcher_note_1"
             android:label="@string/fake_app_name_note"
             android:targetActivity=".ui.main.MainActivity">
             <intent-filter>
@@ -176,7 +179,217 @@
             android:name=".LauncherFakeStudy"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_study"
+            android:icon="@mipmap/ic_launcher_study_1"
+            android:label="@string/fake_app_name_study"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeCalc1"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_calc_1"
+            android:label="@string/fake_app_name_calc"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeCalc2"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_calc_2"
+            android:label="@string/fake_app_name_calc"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeCalc3"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_calc_3"
+            android:label="@string/fake_app_name_calc"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeCalc4"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_calc_4"
+            android:label="@string/fake_app_name_calc"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeCalc5"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_calc_5"
+            android:label="@string/fake_app_name_calc"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeNote1"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_note_1"
+            android:label="@string/fake_app_name_note"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeNote2"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_note_2"
+            android:label="@string/fake_app_name_note"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeNote3"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_note_3"
+            android:label="@string/fake_app_name_note"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeNote4"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_note_4"
+            android:label="@string/fake_app_name_note"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeNote5"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_note_5"
+            android:label="@string/fake_app_name_note"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeStudy1"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_study_1"
+            android:label="@string/fake_app_name_study"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeStudy2"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_study_2"
+            android:label="@string/fake_app_name_study"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeStudy3"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_study_3"
+            android:label="@string/fake_app_name_study"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeStudy4"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_study_4"
+            android:label="@string/fake_app_name_study"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherFakeStudy5"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_study_5"
             android:label="@string/fake_app_name_study"
             android:targetActivity=".ui.main.MainActivity">
             <intent-filter>

@@ -43,6 +43,7 @@ import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.data.download.DownloadCache
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
+import eu.kanade.tachiyomi.extension.installer.RootInstaller
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.network.PREF_DOH_360
@@ -76,8 +77,10 @@ import exh.source.EH_SOURCE_ID
 import exh.source.EXH_SOURCE_ID
 import exh.source.ExhPreferences
 import exh.util.toAnnotatedString
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import okhttp3.Headers
 import tachiyomi.core.common.i18n.pluralStringResource
@@ -464,6 +467,9 @@ object SettingsAdvancedScreen : SearchableSettings {
         var shizukuMissing by rememberSaveable { mutableStateOf(false) }
         // SY -->
         var installerXMissing by rememberSaveable { mutableStateOf(false) }
+        // 选了 root 静默安装但没拿到授权时提示（检测是异步的，不能卡在选择动作里）
+        var rootMissing by rememberSaveable { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
         // SY <--
         val trustExtension = remember { Injekt.get<TrustExtension>() }
 
@@ -519,6 +525,22 @@ object SettingsAdvancedScreen : SearchableSettings {
             )
         }
         // SY <--
+        // SY -->
+        // 选了 root 但没授权：不改设置值（用户可以先去授权），只是把原因说清楚
+        if (rootMissing) {
+            val dismiss = { rootMissing = false }
+            AlertDialog(
+                onDismissRequest = dismiss,
+                title = { Text(text = stringResource(MR.strings.ext_installer_root)) },
+                text = { Text(text = stringResource(MR.strings.ext_installer_root_unavailable_dialog)) },
+                confirmButton = {
+                    TextButton(onClick = dismiss) {
+                        Text(text = stringResource(MR.strings.action_ok))
+                    }
+                },
+            )
+        }
+        // SY <--
         return Preference.PreferenceGroup(
             title = stringResource(MR.strings.label_extensions),
             preferenceItems = listOf(
@@ -538,6 +560,17 @@ object SettingsAdvancedScreen : SearchableSettings {
                             it == BasePreferences.ExtensionInstaller.INSTALLERX && !context.isInstallerXInstalled -> {
                                 installerXMissing = true
                                 false
+                            }
+                            // root 的可用性必须异步探（su 首次会弹授权框，同步等会卡住界面），
+                            // 所以先放行保存，探测失败再提示
+                            it == BasePreferences.ExtensionInstaller.ROOT -> {
+                                scope.launch {
+                                    val granted = withContext(Dispatchers.IO) {
+                                        RootInstaller.isRootAvailable(force = true)
+                                    }
+                                    if (!granted) rootMissing = true
+                                }
+                                true
                             }
                             else -> true
                         }

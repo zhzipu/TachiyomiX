@@ -249,7 +249,6 @@ class PagerPageHolder(
                     minimumScaleType = viewer.config.imageScaleType,
                     cropBorders = viewer.config.imageCropBorders,
                     zoomStartPosition = viewer.config.imageZoomType,
-                    landscapeZoom = viewer.config.landscapeZoom,
                 ),
             )
             if (!isAnimated) {
@@ -409,7 +408,6 @@ class PagerPageHolder(
                         minimumScaleType = viewer.config.imageScaleType,
                         cropBorders = viewer.config.imageCropBorders,
                         zoomStartPosition = viewer.config.imageZoomType,
-                        landscapeZoom = viewer.config.landscapeZoom,
                     ),
                 )
                 if (!isAnimated) {

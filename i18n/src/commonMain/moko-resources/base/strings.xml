@@ -10,6 +10,7 @@
     <string name="disguise_app_icon_summary">Change the name and icon shown on the home screen</string>
     <string name="disguise_app_icon_select">Choose the icon shown on the home screen</string>
     <string name="disguise_app_icon_hint">Applied. The launcher icon may take a while to refresh; the app might briefly appear as not installed.</string>
+    <string name="disguise_icon_variant">Icon %1$d</string>
     <!-- SY -->
 
     <!-- Generic strings -->
@@ -377,6 +378,8 @@
     <string name="ext_installer_shizuku_stopped">Shizuku is not running</string>
     <string name="ext_installer_shizuku_unavailable_dialog">Install and start Shizuku to use Shizuku as extension installer.</string>
     <!-- SY --> <string name="ext_installer_installerx_unavailable_dialog">InstallerX Revived was not found on this device. Install it and finish its setup, then pick this installer again. Open its project page?</string> <!-- SY -->
+    <!-- SY --> <string name="ext_installer_root" translatable="false">Root</string> <!-- SY -->
+    <!-- SY --> <string name="ext_installer_root_unavailable_dialog">Root access was not granted. Allow this app superuser permission in Magisk / KernelSU / APatch, then pick this installer again.</string> <!-- SY -->
     <string name="ext_revoke_trust">Revoke trusted unknown extensions</string>
 
     <!-- Extension repos -->
@@ -657,6 +660,9 @@
     <string name="tracking_guide">Tracking guide</string>
     <string name="pref_auto_update_manga_sync">Update progress after reading</string>
     <string name="pref_auto_update_manga_on_mark_read">Update progress when marked as read</string>
+    <string name="pref_auto_sync_progress_from_trackers">Sync progress from trackers</string>
+    <string name="pref_auto_sync_progress_from_trackers_summary">When opening a manga or refreshing it, pull the reading progress from your trackers and mark the matching chapters as read locally</string>
+    <string name="sync_progress_from_trackers_up_to_chapter">Synced progress from trackers up to chapter %1$d</string>
     <string name="services">Trackers</string>
     <string name="tracking_info">One-way sync to update the chapter progress in external tracker services. Set up tracking for individual entries from their tracking button.</string>
     <string name="enhanced_services">Enhanced trackers</string>

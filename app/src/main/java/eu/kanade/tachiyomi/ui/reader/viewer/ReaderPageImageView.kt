@@ -33,16 +33,15 @@ import coil3.size.Precision
 import coil3.size.ViewSizeResolver
 import com.davemorrissey.labs.subscaleview.ImageSource
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
-import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.EASE_IN_OUT_QUAD
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.EASE_OUT_QUAD
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE
+import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.SCALE_TYPE_SMART_FIT
 import com.github.chrisbanes.photoview.PhotoView
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.data.coil.cropBorders
 import eu.kanade.tachiyomi.data.coil.customDecoder
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonSubsamplingImageView
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
-import eu.kanade.tachiyomi.util.view.isVisibleOnScreen
 import java.io.InputStream
 import okio.BufferedSource
 import tachiyomi.core.common.util.system.ImageUtil
@@ -199,52 +198,28 @@ open class ReaderPageImageView @JvmOverloads constructor(
         onViewClicked?.invoke()
     }
 
+    /**
+     * 当前页成为可见页。
+     *
+     * 原本这里会顺带做「自动放大横向图片」，该功能已移除：它不看屏幕方向、只判图片是不是横的，
+     * 于是「适应屏幕」下每张跨页都会被放大到铺满屏幕高度、左右溢出屏幕 —— 与「整页完整可见」直接冲突。
+     * 现在保留的职责只有：图片还没就绪时挂一次 onReady，把初始缩放（= minScale）应用上去。
+     */
     open fun onPageSelected(forward: Boolean) {
-        with(pageView as? SubsamplingScaleImageView) {
-            if (this == null) return
-            if (isReady) {
-                landscapeZoom(forward)
-            } else {
-                setOnImageEventListener(
-                    object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
-                        override fun onReady() {
-                            setupZoom(config, applyInitialScale = true)
-                            landscapeZoom(forward)
-                            this@ReaderPageImageView.onImageLoaded()
-                        }
-
-                        override fun onImageLoadError(e: Exception) {
-                            onImageLoadError(e)
-                        }
-                    },
-                )
-            }
-        }
-    }
-
-    private fun SubsamplingScaleImageView.landscapeZoom(forward: Boolean) {
-        val config = config
-        if (config != null &&
-            config.landscapeZoom &&
-            config.minimumScaleType == SCALE_TYPE_CENTER_INSIDE &&
-            sWidth > sHeight &&
-            scale == minScale
-        ) {
-            handler?.postDelayed(500) {
-                val point = when (config.zoomStartPosition) {
-                    ZoomStartPosition.LEFT -> if (forward) PointF(0F, 0F) else PointF(sWidth.toFloat(), 0F)
-                    ZoomStartPosition.RIGHT -> if (forward) PointF(sWidth.toFloat(), 0F) else PointF(0F, 0F)
-                    ZoomStartPosition.CENTER -> center
+        val view = pageView as? SubsamplingScaleImageView ?: return
+        if (view.isReady) return
+        view.setOnImageEventListener(
+            object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
+                override fun onReady() {
+                    view.setupZoom(config, applyInitialScale = true)
+                    this@ReaderPageImageView.onImageLoaded()
                 }
 
-                val targetScale = height.toFloat() / sHeight.toFloat()
-                (animateScaleAndCenter(targetScale, point) ?: return@postDelayed)
-                    .withDuration(500)
-                    .withEasing(EASE_IN_OUT_QUAD)
-                    .withInterruptible(true)
-                    .start()
-            }
-        }
+                override fun onImageLoadError(e: Exception) {
+                    onImageLoadError(e)
+                }
+            },
+        )
     }
 
     /**
@@ -447,7 +422,9 @@ open class ReaderPageImageView @JvmOverloads constructor(
         config: Config,
     ) = (pageView as? SubsamplingScaleImageView)?.apply {
         setDoubleTapZoomDuration(config.zoomDuration.getSystemScaledDuration())
-        setMinimumScaleType(config.minimumScaleType)
+        // 智能填充 = 「整页完整可见」：宽图按屏幕宽度缩、高图按屏幕高度缩，任一方向一旦溢出就收回到不溢出。
+        // 这两条约束合并起来就是 min(宽比, 高比)，与 CENTER_INSIDE 完全等价，所以直接交给库算。
+        setMinimumScaleType(config.effectiveScaleType)
         setMinimumDpi(1) // Just so that very small image will be fit for initial load
         setCropBorders(config.cropBorders)
         setOnImageEventListener(
@@ -457,7 +434,6 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     setupZoom(config, applyInitialScale = swapOutgoingView == null)
                     // 底层插入模式：新图就绪后再收掉上层原图，切换过程始终有画面
                     this@ReaderPageImageView.finishBottomInsertSwap(this@apply)
-                    if (isVisibleOnScreen()) landscapeZoom(true)
                     this@ReaderPageImageView.onImageLoaded()
                 }
 
@@ -597,8 +573,22 @@ open class ReaderPageImageView @JvmOverloads constructor(
         val minimumScaleType: Int = SCALE_TYPE_CENTER_INSIDE,
         val cropBorders: Boolean = false,
         val zoomStartPosition: ZoomStartPosition = ZoomStartPosition.CENTER,
-        val landscapeZoom: Boolean = false,
-    )
+    ) {
+        /**
+         * 真正交给 SSIV 的缩放类型。
+         *
+         * 已移除的「智能填充」（[SCALE_TYPE_SMART_FIT]）当初的定义是「整页完整可见」：
+         * 宽图按屏幕宽度缩放、高图按屏幕高度缩放，任一方向一旦溢出就收回到不溢出 ——
+         * 两条约束合并后就是 min(宽比, 高比)，与 [SCALE_TYPE_CENTER_INSIDE] 完全等价，
+         * 所以它被并进了「适应屏幕」，这里保留映射只是为了兜住没走 init 迁移的旧值（6）。
+         */
+        val effectiveScaleType: Int
+            get() = if (minimumScaleType == SCALE_TYPE_SMART_FIT) {
+                SCALE_TYPE_CENTER_INSIDE
+            } else {
+                minimumScaleType
+            }
+    }
 
     enum class ZoomStartPosition {
         LEFT,

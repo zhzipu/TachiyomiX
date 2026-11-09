@@ -254,13 +254,56 @@ open class BrowseSourceScreenModel(
     // SY -->
     private val swipeModeFlow = sourcePreferences.browseSwipeToPage.changes()
 
-    // Cache of pages prefetched in swipe-to-page mode (key = page number). The current page is
-    // always shown alone (vertical scrolling is locked), while the two following pages are
-    // fetched ahead of time so swiping to them shows results without waiting for the network.
+    // Cache of pages prefetched in swipe-to-page mode, keyed by the paging key (which is the page
+    // number for most sources). The current page is always shown alone (vertical scrolling is
+    // locked), while the two following pages are fetched ahead of time so swiping to them shows
+    // results without waiting for the network.
     // ConcurrentHashMap: written from the preload coroutine / paging dispatcher, read from the UI
     // thread when a swipe is released (see [hasNextSwipePage]).
     private val swipePageCache: MutableMap<Long, List<Pair<Manga, RaisedSearchMetadata?>>> =
         ConcurrentHashMap()
+
+    // 页码 ↔ 分页键。绝大多数图源的分页键就是页码（1、2、3…），但有的图源不是：
+    // E-Hentai 的列表翻页靠 `?next=<galleryId>`，下一页的键是上一页返回的 nextKey（画廊 ID）。
+    // 拿页码去请求这种图源只会得到错误的结果（`?next=2` 并不是「第 2 页」），所以这里沿
+    // nextKey 链记录每一页真正要用的键，页码只是链上的序号。
+    private val pageKeys = ConcurrentHashMap<Int, Long>().apply { put(1, 1L) }
+    private val keyPages = ConcurrentHashMap<Long, Int>().apply { put(1L, 1) }
+
+    // 该图源的分页键是否就是页码。首页加载完成后即可判定。
+    @Volatile
+    private var keysArePageNumbers = true
+
+    // 每一页是否有下一页（由图源返回的 nextKey 决定），用于区分「已到最后一页」与「还没加载过」。
+    private val pageHasNext = ConcurrentHashMap<Int, Boolean>()
+
+    /** [page] 页真正要用的分页键；null 表示这一页还没沿 nextKey 链走到。 */
+    private fun keyForPage(page: Int): Long? =
+        if (keysArePageNumbers) page.toLong() else pageKeys[page]
+
+    /** 记录一页的加载结果，并把它的下一页接到 key 链上。 */
+    private fun recordLoadedPage(key: Long, nextKey: Long?) {
+        val page = keyPages.getOrPut(key) { key.toInt() }
+        pageKeys.putIfAbsent(page, key)
+        pageHasNext[page] = nextKey != null
+        if (nextKey == null) return
+        // 下一页的键不是「页码 + 1」的图源，页码就不能再当作分页键使用
+        if (nextKey != page + 1L) keysArePageNumbers = false
+        pageKeys.putIfAbsent(page + 1, nextKey)
+        keyPages.putIfAbsent(nextKey, page + 1)
+    }
+
+    /** 换列表 / 换筛选 / 搜索后页码语义会变，翻页缓存与 key 链一起清掉。 */
+    private fun resetPagingChain() {
+        swipePageCache.clear()
+        pageKeys.clear()
+        pageKeys[1] = 1L
+        keyPages.clear()
+        keyPages[1L] = 1
+        pageHasNext.clear()
+        keysArePageNumbers = true
+        _pageSizes.value = emptyMap()
+    }
 
     // Tracks how many manga items each website page returned, keyed by page number. Sources return
     // a different number of items per page, so a fixed page size can't translate a scroll index back
@@ -285,7 +328,10 @@ open class BrowseSourceScreenModel(
      * Whether [page]'s content is already in the swipe cache, so the UI can skip the loading
      * spinner that would otherwise flash every time a swipe lands on a preloaded page.
      */
-    fun isPageCached(page: Int): Boolean = swipePageCache.containsKey(page.toLong())
+    fun isPageCached(page: Int): Boolean {
+        val key = keyForPage(page) ?: return false
+        return swipePageCache.containsKey(key)
+    }
 
     /**
      * 侧滑翻页模式下，[page] 之后是否还有下一页。
@@ -294,8 +340,12 @@ open class BrowseSourceScreenModel(
      * （[preloadSwipePages]）和相邻页的实际加载都会把结果写进 [swipePageCache]，空列表即到底。
      * 返回 null 表示那一页还没取过（无从判断），调用方应按「有下一页」处理，保持原有行为。
      */
-    fun hasNextSwipePage(page: Int): Boolean? =
-        swipePageCache[(page + 1).toLong()]?.isNotEmpty()
+    fun hasNextSwipePage(page: Int): Boolean? {
+        // 图源自己说了没有下一页（nextKey 为空 / 下一页取到空列表）
+        if (pageHasNext[page] == false) return false
+        val key = keyForPage(page + 1) ?: return null
+        return swipePageCache[key]?.isNotEmpty()
+    }
 
     /**
      * Builds the paging flow for a single [page]. Used for both the current page and, in
@@ -318,14 +368,17 @@ open class BrowseSourceScreenModel(
         if (trackPageSizes) {
             _pageSizes.value = emptyMap()
         }
+        // 页码只是序号，真正请求图源用的是分页键。键还没沿 nextKey 链走到时不能拿页码硬凑，
+        // 否则请求的是图源的其它内容（E-Hentai 上 `?next=2` 并不是第 2 页）。
+        val key = keyForPage(page) ?: return flowOf(PagingData.empty())
         return Pager(
             config = config,
-            initialKey = page.toLong(),
+            initialKey = key,
         ) {
             val pagingSource = createSourcePagingSource(listing.query ?: "", listing.filters)
             when {
-                swipeMode -> SinglePagePagingSource(pagingSource, page.toLong(), swipePageCache)
-                trackPageSizes -> PageSizeTrackingSource(pagingSource, _pageSizes)
+                swipeMode -> SinglePagePagingSource(pagingSource, key, page)
+                trackPageSizes -> PageSizeTrackingSource(pagingSource)
                 else -> pagingSource
             }
         }.flow.map { pagingData ->
@@ -376,53 +429,66 @@ open class BrowseSourceScreenModel(
      * 其它错误（网络等）不记，保持「未知」以便重试。
      */
     private suspend fun preloadSwipePages(listing: Listing, currentPage: Int) {
-        for (target in (currentPage - 1)..(currentPage + SWIPE_PREFETCH_PAGES)) {
-            if (target < 1) continue
-            val key = target.toLong()
-            if (swipePageCache.containsKey(key)) continue
-            val pagingSource = createSourcePagingSource(listing.query ?: "", listing.filters)
-            val result = pagingSource.load(
-                PagingSource.LoadParams.Refresh(
-                    key = key,
-                    loadSize = PAGE_SIZE,
-                    placeholdersEnabled = false,
-                ),
-            )
-            when {
-                result is PagingSource.LoadResult.Page -> swipePageCache[key] = result.data
-                result is PagingSource.LoadResult.Error && result.throwable is NoResultsException ->
-                    swipePageCache[key] = emptyList()
+        // 必须按页码顺序一页页走：下一页的分页键来自上一页返回的 nextKey，
+        // 跳着取会拿不到键（也用错键）。
+        var target = (currentPage - 1).coerceAtLeast(1)
+        val lastTarget = currentPage + SWIPE_PREFETCH_PAGES
+        while (target <= lastTarget) {
+            val key = keyForPage(target) ?: break
+            if (!swipePageCache.containsKey(key)) {
+                val pagingSource = createSourcePagingSource(listing.query ?: "", listing.filters)
+                val result = pagingSource.load(
+                    PagingSource.LoadParams.Refresh(
+                        key = key,
+                        loadSize = PAGE_SIZE,
+                        placeholdersEnabled = false,
+                    ),
+                )
+                when {
+                    result is PagingSource.LoadResult.Page -> {
+                        swipePageCache[key] = result.data
+                        recordLoadedPage(key, result.nextKey)
+                    }
+                    result is PagingSource.LoadResult.Error && result.throwable is NoResultsException -> {
+                        swipePageCache[key] = emptyList()
+                        pageHasNext[target] = false
+                    }
+                }
             }
+            target++
         }
     }
 
     /**
      * Paging source used in swipe-to-page mode. It serves the current page only (nextKey is
-     * always null so vertical scrolling never advances), and prefers [cache] when the requested
-     * page has already been prefetched.
+     * always null so vertical scrolling never advances), and prefers [swipePageCache] when the
+     * requested page has already been prefetched.
      */
-    private class SinglePagePagingSource(
+    private inner class SinglePagePagingSource(
         private val delegate: PagingSource<Long, Pair<Manga, RaisedSearchMetadata?>>,
         private val initialKey: Long,
-        private val cache: MutableMap<Long, List<Pair<Manga, RaisedSearchMetadata?>>>,
+        private val page: Int,
     ) : PagingSource<Long, Pair<Manga, RaisedSearchMetadata?>>() {
         override fun getRefreshKey(state: PagingState<Long, Pair<Manga, RaisedSearchMetadata?>>): Long? =
             delegate.getRefreshKey(state)
 
         override suspend fun load(params: LoadParams<Long>): LoadResult<Long, Pair<Manga, RaisedSearchMetadata?>> {
-            val page = params.key ?: initialKey
-            val cached = cache[page]
+            val key = params.key ?: initialKey
+            val cached = swipePageCache[key]
             return if (cached != null) {
                 LoadResult.Page(data = cached, prevKey = null, nextKey = null)
             } else {
                 val result = delegate.load(params)
                 if (result is LoadResult.Page) {
-                    cache[page] = result.data
+                    swipePageCache[key] = result.data
+                    // 记下这一页的条目数与下一页的键（页码只是 nextKey 链上的序号）
+                    recordLoadedPage(key, result.nextKey)
                     result.copy(nextKey = null)
                 } else {
                     // 这一页就是空的（没有更多结果）：记成空列表，让 hasNextSwipePage 认出末尾
                     if (result is LoadResult.Error && result.throwable is NoResultsException) {
-                        cache[page] = emptyList()
+                        swipePageCache[key] = emptyList()
+                        pageHasNext[keyPages[key] ?: page] = false
                     }
                     result
                 }
@@ -436,17 +502,21 @@ open class BrowseSourceScreenModel(
      * index back into the website page number. Wraps the real [SourcePagingSource] without
      * otherwise changing its behaviour.
      */
-    private class PageSizeTrackingSource(
+    private inner class PageSizeTrackingSource(
         private val delegate: SourcePagingSource,
-        private val pageSizes: MutableStateFlow<Map<Long, Int>>,
     ) : PagingSource<Long, Pair<Manga, RaisedSearchMetadata?>>() {
         override fun getRefreshKey(state: PagingState<Long, Pair<Manga, RaisedSearchMetadata?>>): Long? =
             delegate.getRefreshKey(state)
 
         override suspend fun load(params: LoadParams<Long>): LoadResult<Long, Pair<Manga, RaisedSearchMetadata?>> {
+            val key = params.key ?: 1L
             val result = delegate.load(params)
             if (result is LoadResult.Page) {
-                pageSizes.update { it + ((params.key ?: 1L) to result.data.size) }
+                // 键不一定是页码（E-Hentai 是画廊 ID），所以条目数按「链上的序号」记，
+                // 否则底部页码会显示成几百万。
+                val page = keyPages.getOrPut(key) { key.toInt() }
+                recordLoadedPage(key, result.nextKey)
+                _pageSizes.update { it + (page.toLong() to result.data.size) }
             }
             return result
         }
@@ -485,18 +555,21 @@ open class BrowseSourceScreenModel(
 
     fun setListing(listing: Listing) {
         // SY -->
-        swipePageCache.clear()
-        _pageSizes.value = emptyMap()
+        resetPagingChain()
         // SY <--
         mutableState.update { it.copy(listing = listing, toolbarQuery = null, currentPage = 1) }
     }
 
-    fun goToPage(page: Int) {
-        if (page < 1) return
+    fun goToPage(page: Int): Boolean {
+        if (page < 1) return false
         // SY -->
+        // 页码只是 nextKey 链上的序号：键还没走到就不跳，
+        // 否则会用错误的键去请求图源（E-Hentai 上就是完全无关的内容）。
+        if (keyForPage(page) == null) return false
         _pageSizes.value = emptyMap()
         // SY <--
         mutableState.update { it.copy(currentPage = page) }
+        return true
     }
 
     fun setFilters(filters: FilterList) {
@@ -507,8 +580,7 @@ open class BrowseSourceScreenModel(
 
     fun search(query: String? = null, filters: FilterList? = null) {
         // SY -->
-        swipePageCache.clear()
-        _pageSizes.value = emptyMap()
+        resetPagingChain()
         if (filters != null && filters !== state.value.filters) {
             mutableState.update { state -> state.copy(filters = filters) }
         }
@@ -543,8 +615,7 @@ open class BrowseSourceScreenModel(
 
     fun searchGenre(genreName: String) {
         // SY -->
-        swipePageCache.clear()
-        _pageSizes.value = emptyMap()
+        resetPagingChain()
         // SY <--
         val defaultFilters = source.getFilterList()
         var genreExists = false
@@ -906,7 +977,7 @@ open class BrowseSourceScreenModel(
                 ?.takeUnless { allDefault }
                 ?: source.getFilterList()
 
-            _pageSizes.value = emptyMap()
+            resetPagingChain()
             mutableState.update {
                 it.copy(
                     listing = Listing.Search(

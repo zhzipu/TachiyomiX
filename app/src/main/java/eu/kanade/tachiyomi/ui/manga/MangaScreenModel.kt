@@ -145,7 +145,7 @@ class MangaScreenModel(
     private val isFromSource: Boolean,
     val smartSearched: Boolean,
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
-    trackPreferences: TrackPreferences = Injekt.get(),
+    private val trackPreferences: TrackPreferences = Injekt.get(),
     readerPreferences: ReaderPreferences = Injekt.get(),
     uiPreferences: UiPreferences = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
@@ -457,6 +457,12 @@ class MangaScreenModel(
                 )
             }
 
+            // KMK --> 打开漫画时也把追踪平台的进度拉下来（可在「设置 → 追踪」里关掉）
+            if (screenModelScope.isActive) {
+                launch { syncTrackers() }
+            }
+            // KMK <--
+
             // Initial loading finished
             updateSuccessState { it.copy(isRefreshingData = false) }
         }
@@ -470,9 +476,19 @@ class MangaScreenModel(
                 fetchDetails = true,
                 fetchChapters = true,
             )
+            // KMK --> 手动刷新后，从追踪平台把进度同步回来
+            launch { syncTrackers() }
+            // KMK <--
             updateSuccessState { it.copy(isRefreshingData = false) }
         }
     }
+
+    // KMK -->
+    private suspend fun syncTrackers() {
+        if (!trackPreferences.autoSyncProgressFromTrackers.get()) return
+        refreshTrackers(enhancedTrackersOnly = false)
+    }
+    // KMK <--
 
     private suspend fun fetchAllFromSource(
         manualFetch: Boolean,
@@ -1302,9 +1318,12 @@ class MangaScreenModel(
     }
 
     private suspend fun refreshTrackers(
+        // KMK -->
+        enhancedTrackersOnly: Boolean = true,
+        // KMK <--
         refreshTracks: RefreshTracks = Injekt.get(),
     ) {
-        refreshTracks.await(mangaId)
+        refreshTracks.await(mangaId, enhancedTrackersOnly = enhancedTrackersOnly)
             .filter { it.first != null }
             .forEach { (track, e) ->
                 logcat(LogPriority.ERROR, e) {

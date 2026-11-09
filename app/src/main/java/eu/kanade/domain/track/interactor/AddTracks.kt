@@ -1,5 +1,6 @@
 package eu.kanade.domain.track.interactor
 
+import android.app.Application
 import eu.kanade.domain.track.model.toDbTrack
 import eu.kanade.domain.track.model.toDomainTrack
 import eu.kanade.tachiyomi.data.database.models.Track
@@ -8,14 +9,18 @@ import eu.kanade.tachiyomi.data.track.Tracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.util.lang.convertEpochMillisZone
+import eu.kanade.tachiyomi.util.system.toast
 import logcat.LogPriority
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withNonCancellableContext
+import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.history.interactor.GetHistory
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.track.interactor.InsertTrack
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.time.ZoneOffset
@@ -48,10 +53,15 @@ class AddTracks(
                     ?.chapterNumber ?: -1.0
 
                 if (latestLocalReadChapterNumber > track.lastChapterRead) {
-                    track = track.copy(
-                        lastChapterRead = latestLocalReadChapterNumber,
-                    )
+                    /* KMK -->
+                    // 这里不再提前改本地的 lastChapterRead：直接把远端更新后的 track 拿回来，
+                    // 否则下面 sync 时会把「本地进度」当成远端进度、覆盖掉真正的远端状态。
+                    KMK <-- */
                     tracker.setRemoteLastChapterRead(track.toDbTrack(), latestLocalReadChapterNumber.toInt())
+                        // KMK -->
+                        .toDomainTrack(idRequired = false)
+                        ?.let { track = it }
+                    // KMK <--
                 }
 
                 if (track.startDate <= 0) {
@@ -74,6 +84,16 @@ class AddTracks(
             }
 
             syncChapterProgressWithTrack.await(mangaId, track, tracker)
+                // KMK -->
+                ?.let {
+                    val context = Injekt.get<Application>()
+                    withUIContext {
+                        context.toast(
+                            context.stringResource(MR.strings.sync_progress_from_trackers_up_to_chapter, it),
+                        )
+                    }
+                }
+            // KMK <--
         }
     }
 
@@ -94,6 +114,19 @@ class AddTracks(
                                 track.toDomainTrack(idRequired = false)!!,
                                 service,
                             )
+                                // KMK -->
+                                ?.let {
+                                    val context = Injekt.get<Application>()
+                                    withUIContext {
+                                        context.toast(
+                                            context.stringResource(
+                                                MR.strings.sync_progress_from_trackers_up_to_chapter,
+                                                it,
+                                            ),
+                                        )
+                                    }
+                                }
+                            // KMK <--
                         }
                     } catch (e: Exception) {
                         logcat(

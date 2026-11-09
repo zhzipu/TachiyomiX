@@ -12,30 +12,51 @@ import uy.kohesive.injekt.api.get
 
 private const val TABLET_UI_REQUIRED_SCREEN_WIDTH_DP = 720
 
-// some tablets have screen width like 711dp = 1600px / 2.25
-private const val TABLET_UI_MIN_SCREEN_WIDTH_PORTRAIT_DP = 700
+/**
+ * 平板（大屏）界面要求的窗口最小边。
+ *
+ * 书本式折叠屏展开后内屏的最小边通常在 600~900dp 之间（竖屏展开时最小边是宽度），
+ * 收起到外屏后只有 380~430dp；普通手机竖屏最小边是宽度、横屏最小边也是宽度，
+ * 都到不了 600dp。所以用「窗口最小边」一个条件就能区分：展开→平板界面，收起→手机界面。
+ */
+const val TABLET_UI_MIN_WINDOW_SIZE_DP = 600
 
-// make sure icons on the nav rail fit
-private const val TABLET_UI_MIN_SCREEN_WIDTH_LANDSCAPE_DP = 600
+/**
+ * resources 里自带的那份配置是否已经算作平板宽度（只看未经改写的 smallestScreenWidthDp）。
+ */
+private fun Configuration.resourceReportsTabletUi(): Boolean {
+    return smallestScreenWidthDp >= TABLET_UI_REQUIRED_SCREEN_WIDTH_DP
+}
+
+/**
+ * 窗口最小边是否达到大屏宽度。
+ *
+ * 不用 `smallestScreenWidthDp`，因为它是「物理最小边」，折叠屏展开后接近正方形时
+ * 它并不随折叠状态变化；窗口宽高则一定随折叠/展开更新。
+ */
+fun isLargeWindow(widthDp: Int, heightDp: Int): Boolean {
+    return minOf(widthDp, heightDp) >= TABLET_UI_MIN_WINDOW_SIZE_DP
+}
+
+fun Configuration.isTabletUi(mode: TabletUiMode): Boolean {
+    return when (mode) {
+        // 自动：按当前窗口尺寸判断，折叠屏收起/展开时随窗口大小切换
+        TabletUiMode.AUTOMATIC -> isLargeWindow(screenWidthDp, screenHeightDp)
+        TabletUiMode.ALWAYS -> true
+        TabletUiMode.LANDSCAPE -> orientation == Configuration.ORIENTATION_LANDSCAPE
+        TabletUiMode.NEVER -> false
+    }
+}
 
 fun Configuration.isTabletUi(): Boolean {
-    return smallestScreenWidthDp >= TABLET_UI_REQUIRED_SCREEN_WIDTH_DP
+    return isTabletUi(Injekt.get<UiPreferences>().tabletUiMode.get())
 }
 
 // TODO: move the logic to `isTabletUi()` when main activity is rewritten in Compose
 fun Context.prepareTabletUiContext(): Context {
     val configuration = resources.configuration
-    val expected = when (Injekt.get<UiPreferences>().tabletUiMode.get()) {
-        TabletUiMode.AUTOMATIC ->
-            configuration.smallestScreenWidthDp >= when (configuration.orientation) {
-                Configuration.ORIENTATION_PORTRAIT -> TABLET_UI_MIN_SCREEN_WIDTH_PORTRAIT_DP
-                else -> TABLET_UI_MIN_SCREEN_WIDTH_LANDSCAPE_DP
-            }
-        TabletUiMode.ALWAYS -> true
-        TabletUiMode.LANDSCAPE -> configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        TabletUiMode.NEVER -> false
-    }
-    if (configuration.isTabletUi() != expected) {
+    val expected = configuration.isTabletUi()
+    if (configuration.resourceReportsTabletUi() != expected) {
         val overrideConf = Configuration()
         overrideConf.setTo(configuration)
         overrideConf.smallestScreenWidthDp = if (expected) {

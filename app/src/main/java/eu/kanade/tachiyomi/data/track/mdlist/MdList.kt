@@ -180,5 +180,9 @@ class MdList(id: Long) : BaseTracker(id, "MDList") {
     override val isLoggedIn: Boolean
         get() = trackPreferences.trackToken(this).get().isNotEmpty()
 
+    // KMK -->
+    override fun hasNotStartedReading(status: Long): Boolean = status == FollowStatus.PLAN_TO_READ.long
+    // KMK <--
+
     class MangaDexNotFoundException : Exception("Mangadex not enabled")
 }

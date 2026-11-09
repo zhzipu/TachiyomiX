@@ -77,7 +77,9 @@ interface Tracker {
 
     suspend fun setRemoteStatus(track: Track, status: Long)
 
-    suspend fun setRemoteLastChapterRead(track: Track, chapterNumber: Int)
+    // KMK --> 返回更新后的 track，供调用方继续沿用（避免本地 progress 被远端旧值覆盖）
+    suspend fun setRemoteLastChapterRead(track: Track, chapterNumber: Int): Track
+    // KMK <--
 
     suspend fun setRemoteScore(track: Track, scoreString: String)
 
@@ -92,4 +94,12 @@ interface Tracker {
 
     suspend fun searchById(id: String): TrackSearch?
     // SY <--
+
+    // KMK -->
+    /**
+     * 该状态表示「尚未开始阅读」。同步进度时，若远端还停在这个状态，
+     * 不应把本地的阅读记录倒灌回去（否则会把「想看」错标成「在读/已读」）。
+     */
+    fun hasNotStartedReading(status: Long): Boolean
+    // KMK <--
 }

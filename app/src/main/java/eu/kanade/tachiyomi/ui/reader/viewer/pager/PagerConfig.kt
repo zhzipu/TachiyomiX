@@ -67,9 +67,6 @@ class PagerConfig(
     var disableDoubleTapZoom = false
         private set
 
-    var landscapeZoom = false
-        private set
-
     // SY -->
     var usePageTransitions = false
 
@@ -126,9 +123,6 @@ class PagerConfig(
 
         readerPreferences.disableDoubleTapZoom
             .register({ disableDoubleTapZoom = it })
-
-        readerPreferences.landscapeZoom
-            .register({ landscapeZoom = it }, { imagePropertyChangedListener?.invoke() })
 
         readerPreferences.navigationModePager
             .register({ navigationMode = it }, { updateNavigation(navigationMode) })

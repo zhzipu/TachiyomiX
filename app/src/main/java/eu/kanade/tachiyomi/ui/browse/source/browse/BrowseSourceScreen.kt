@@ -197,6 +197,19 @@ data class BrowseSourceScreen(
 
         // SY -->
         val context = LocalContext.current
+        // 翻到指定页。页码只是 nextKey 链上的序号（E-Hentai 的分页键是画廊 ID），
+        // 目标页的键还没取到时不给跳，否则会拿错误的键请求图源、显示成完全无关的内容。
+        val goToPage: (Int) -> Unit = { page ->
+            if (!screenModel.goToPage(page)) {
+                context.toast(
+                    if (screenModel.hasNextSwipePage(visiblePage) == false) {
+                        SYMR.strings.browse_last_page
+                    } else {
+                        MR.strings.loading
+                    },
+                )
+            }
+        }
         // SY <--
 
         if (screenModel.source is StubSource) {
@@ -471,7 +484,7 @@ data class BrowseSourceScreen(
                             ),
                     ) {
                         IconButton(
-                            onClick = { screenModel.goToPage(visiblePage - 1) },
+                            onClick = { goToPage(visiblePage - 1) },
                             enabled = visiblePage > 1,
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
@@ -493,7 +506,7 @@ data class BrowseSourceScreen(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         IconButton(
-                            onClick = { screenModel.goToPage(visiblePage + 1) },
+                            onClick = { goToPage(visiblePage + 1) },
                             modifier = Modifier
                                 .align(Alignment.CenterEnd)
                                 .size(72.dp, 36.dp),
@@ -618,24 +631,34 @@ data class BrowseSourceScreen(
                                         val threshold = screenWidthPx * 0.25f
                                         when {
                                             swipeOffset.value > threshold && visiblePage > 1 -> {
-                                                swipeOffset.animateTo(screenWidthPx)
                                                 val targetPage = visiblePage - 1
-                                                swipeOffset.snapTo(0f)
-                                                visiblePage = targetPage
-                                                screenModel.goToPage(targetPage)
-                                            }
-                                            swipeOffset.value < -threshold -> {
-                                                // 图源已无下一页（下一页取到空列表）：回弹原位并提示，
-                                                // 不再切到一个空白的页码上
-                                                if (screenModel.hasNextSwipePage(visiblePage) == false) {
-                                                    swipeOffset.animateTo(0f)
-                                                    context.toast(SYMR.strings.browse_last_page)
-                                                } else {
-                                                    swipeOffset.animateTo(-screenWidthPx)
-                                                    val targetPage = visiblePage + 1
+                                                if (screenModel.goToPage(targetPage)) {
+                                                    swipeOffset.animateTo(screenWidthPx)
                                                     swipeOffset.snapTo(0f)
                                                     visiblePage = targetPage
-                                                    screenModel.goToPage(targetPage)
+                                                } else {
+                                                    swipeOffset.animateTo(0f)
+                                                }
+                                            }
+                                            swipeOffset.value < -threshold -> {
+                                                val targetPage = visiblePage + 1
+                                                when {
+                                                    // 图源已无下一页（下一页取到空列表）：回弹原位并提示，
+                                                    // 不再切到一个空白的页码上
+                                                    screenModel.hasNextSwipePage(visiblePage) == false -> {
+                                                        swipeOffset.animateTo(0f)
+                                                        context.toast(SYMR.strings.browse_last_page)
+                                                    }
+                                                    // 下一页的分页键还没沿 nextKey 链取到：先回弹，
+                                                    // 不能退化成用页码当键去请求（E-Hentai 会翻到别的内容）
+                                                    !screenModel.goToPage(targetPage) -> {
+                                                        swipeOffset.animateTo(0f)
+                                                    }
+                                                    else -> {
+                                                        swipeOffset.animateTo(-screenWidthPx)
+                                                        swipeOffset.snapTo(0f)
+                                                        visiblePage = targetPage
+                                                    }
                                                 }
                                             }
                                             else -> swipeOffset.animateTo(0f)
@@ -854,7 +877,7 @@ data class BrowseSourceScreen(
                 onDismissRequest = onDismissRequest,
                 currentPage = dialog.currentPage,
                 onConfirm = { pagingTargetPage ->
-                    screenModel.goToPage(pagingTargetPage)
+                    goToPage(pagingTargetPage)
                 },
             )
             else -> {}

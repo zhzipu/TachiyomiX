@@ -1,21 +1,28 @@
 package eu.kanade.presentation.more.settings.screen
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.Calculate
 import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.MenuBook
-import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -36,17 +43,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.graphics.drawable.toBitmap
 import androidx.fragment.app.FragmentActivity
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -221,11 +234,11 @@ object SettingsSecurityScreen : SearchableSettings {
                 },
                 // SY <--
                 kotlin.run {
-                    val currentAlias = LauncherDisguise.normalize(securityPreferences.fakeLauncherIcon.get())
+                    val currentSkin = LauncherDisguise.skinOf(securityPreferences.fakeLauncherIcon.get())
                     var dialogOpen by remember { mutableStateOf(false) }
                     if (dialogOpen) {
                         DisguiseDialog(
-                            selectedAlias = currentAlias,
+                            selectedAlias = currentSkin.alias,
                             onDismissRequest = { dialogOpen = false },
                             onSelect = { alias ->
                                 dialogOpen = false
@@ -237,7 +250,7 @@ object SettingsSecurityScreen : SearchableSettings {
                     }
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(MR.strings.disguise_app_icon),
-                        subtitle = stringResource(disguiseNameRes(currentAlias)),
+                        subtitle = disguiseSubtitle(currentSkin),
                         onClick = { dialogOpen = true },
                     )
                 },
@@ -247,28 +260,25 @@ object SettingsSecurityScreen : SearchableSettings {
     }
 
     // SY -->
-    private fun disguiseNameRes(alias: String): StringResource = when (alias) {
-        LauncherDisguise.FAKE_CALC -> MR.strings.fake_app_name_calc
-        LauncherDisguise.FAKE_NOTE -> MR.strings.fake_app_name_note
-        LauncherDisguise.FAKE_STUDY -> MR.strings.fake_app_name_study
-        else -> MR.strings.app_name
+    private fun disguiseTypeNameRes(type: LauncherDisguise.Type?): StringResource = when (type) {
+        LauncherDisguise.Type.Calculator -> MR.strings.fake_app_name_calc
+        LauncherDisguise.Type.Notebook -> MR.strings.fake_app_name_note
+        LauncherDisguise.Type.Study -> MR.strings.fake_app_name_study
+        null -> MR.strings.app_name
     }
 
-    private data class DisguiseOption(
-        val alias: String,
-        val nameRes: StringResource,
-        val icon: ImageVector,
-    )
-
-    private val disguiseOptions = listOf(
-        DisguiseOption(LauncherDisguise.DEFAULT, MR.strings.app_name, Icons.Outlined.MenuBook),
-        DisguiseOption(LauncherDisguise.FAKE_CALC, MR.strings.fake_app_name_calc, Icons.Outlined.Calculate),
-        DisguiseOption(LauncherDisguise.FAKE_NOTE, MR.strings.fake_app_name_note, Icons.Outlined.EditNote),
-        DisguiseOption(LauncherDisguise.FAKE_STUDY, MR.strings.fake_app_name_study, Icons.Outlined.School),
-    )
+    @Composable
+    private fun disguiseSubtitle(skin: LauncherDisguise.Skin): String {
+        val name = stringResource(disguiseTypeNameRes(skin.type))
+        return if (skin.type == null) {
+            name
+        } else {
+            "$name · " + stringResource(MR.strings.disguise_icon_variant, skin.variant)
+        }
+    }
 
     /**
-     * 伪装应用选择弹窗：列出各桌面入口的名称与图标，当前生效项打勾。
+     * 伪装应用选择弹窗：默认入口一行，三种身份各一行图标（同类里的多套图标平铺成一行，当前生效项描边高亮）。
      */
     @Composable
     fun DisguiseDialog(
@@ -280,28 +290,28 @@ object SettingsSecurityScreen : SearchableSettings {
             onDismissRequest = onDismissRequest,
             title = { Text(text = stringResource(MR.strings.disguise_app_icon)) },
             text = {
-                Column {
-                    disguiseOptions.forEach { option ->
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    val defaultSkin = LauncherDisguise.skins.first()
+                    DisguiseDefaultRow(
+                        selected = defaultSkin.alias == selectedAlias,
+                        onClick = { onSelect(defaultSkin.alias) },
+                    )
+                    LauncherDisguise.Type.entries.forEach { type ->
+                        Text(
+                            text = stringResource(disguiseTypeNameRes(type)),
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                        )
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onSelect(option.alias) }
-                                .padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Icon(imageVector = option.icon, contentDescription = null)
-                            Text(
-                                text = stringResource(option.nameRes),
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(start = 16.dp),
-                            )
-                            if (option.alias == selectedAlias) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
+                            LauncherDisguise.skinsOf(type).forEach { skin ->
+                                DisguiseSkinTile(
+                                    skin = skin,
+                                    selected = skin.alias == selectedAlias,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { onSelect(skin.alias) },
                                 )
                             }
                         }
@@ -315,6 +325,94 @@ object SettingsSecurityScreen : SearchableSettings {
                 }
             },
         )
+    }
+
+    /** 默认入口（TachiyomiX 本体图标 + 应用名）。 */
+    @Composable
+    private fun DisguiseDefaultRow(
+        selected: Boolean,
+        onClick: () -> Unit,
+    ) {
+        val context = LocalContext.current
+        // 自适应图标是 XML，painterResource 加载不了，直接问包管理器要 Drawable 再画成位图
+        val appIcon = remember {
+            runCatching { context.packageManager.getApplicationIcon(context.packageName) }.getOrNull()
+        }
+        val bitmap = remember(appIcon) {
+            appIcon?.let { runCatching { it.toBitmap(96, 96).asImageBitmap() }.getOrNull() }
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = 8.dp),
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
+                )
+            } else {
+                Icon(imageVector = Icons.Outlined.MenuBook, contentDescription = null)
+            }
+            Text(
+                text = stringResource(MR.strings.app_name),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 16.dp),
+            )
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Outlined.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+
+    /**
+     * 素材按 88/108 排版、桌面遮罩只露 72/108，预览要放大 88/72 才是真实观感。
+     */
+    private const val PREVIEW_MASK_SCALE = 88f / 72f
+
+    /** 单套图标：选中时外面一圈主色描边。 */
+    @Composable
+    private fun DisguiseSkinTile(
+        skin: LauncherDisguise.Skin,
+        selected: Boolean,
+        modifier: Modifier = Modifier,
+        onClick: () -> Unit,
+    ) {
+        val previewRes = skin.previewRes ?: return
+        val ringColor = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
+        Box(
+            modifier = modifier
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(14.dp))
+                .background(ringColor)
+                .clickable(onClick = onClick)
+                .padding(3.dp),
+        ) {
+            Image(
+                painter = painterResource(previewRes),
+                contentDescription = stringResource(MR.strings.disguise_icon_variant, skin.variant),
+                contentScale = ContentScale.Crop,
+                // 素材按 88/108 排版，桌面上会被遮罩裁到 72/108；
+                // 预览也放大同样倍数再裁，看到的才是真实观感（否则显得四周留白偏大）
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(11.dp))
+                    .graphicsLayer {
+                        scaleX = PREVIEW_MASK_SCALE
+                        scaleY = PREVIEW_MASK_SCALE
+                    },
+            )
+        }
     }
     // SY <--
 

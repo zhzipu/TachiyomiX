@@ -363,23 +363,26 @@ class MainActivity : BaseActivity() {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
 
-        // App updates
+        // App updates：启动时检测一次。
+        // 每次冷启动都会查（forceCheck = true 跳过后台那套 3 天节流），
+        // 但同一个新版本只提示一次 —— 否则没更新时每次打开 App 都会被推到更新页。
+        // 启动路径自己会跳提示页，所以不再发通知（notify = false），避免两处重复提醒。
         LaunchedEffect(Unit) {
-            if (BuildConfig.INCLUDE_UPDATER) {
-                try {
-                    val result = AppUpdateChecker().checkForUpdate(context)
-                    if (result is GetApplicationRelease.Result.NewUpdate) {
-                        val updateScreen = NewUpdateScreen(
-                            versionName = result.release.version,
-                            changelogInfo = result.release.info,
-                            releaseLink = result.release.releaseLink,
-                            downloadLink = result.release.getDownloadLink(),
-                        )
-                        navigator.push(updateScreen)
-                    }
-                } catch (e: Exception) {
-                    logcat(LogPriority.ERROR, e)
+            try {
+                val checker = AppUpdateChecker()
+                val result = checker.checkForUpdate(context, forceCheck = true, notify = false)
+                if (result is GetApplicationRelease.Result.NewUpdate && checker.shouldPrompt(result.release)) {
+                    checker.markPrompted(result.release)
+                    val updateScreen = NewUpdateScreen(
+                        versionName = result.release.version,
+                        changelogInfo = result.release.info,
+                        releaseLink = result.release.releaseLink,
+                        downloadLink = result.release.getDownloadLink(),
+                    )
+                    navigator.push(updateScreen)
                 }
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e)
             }
         }
 
